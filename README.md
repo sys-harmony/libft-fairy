@@ -256,7 +256,7 @@ This project is free to use for educational purposes.
 
 ## 💖 Credits
 
-Created with ✨ by **gcxd68**.
+Created with ✨ by **sys-harmony**.
 
 Special thanks to the 42 community for feedback and suggestions.
 
