@@ -32,7 +32,7 @@ Before using libft-fairy, make sure you have installed:
 1. Clone the repository inside your libft directory:
 
 ```bash
-git clone https://github.com/gcxd68/libft-fairy.git
+git clone https://github.com/sys-harmony/libft-fairy.git
 ```
 
 2. Navigate to the tester folder:
