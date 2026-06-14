@@ -16,7 +16,7 @@ static void	test_ft_isalpha(void) {
 		"'a' to 'z'",
 		"'{' to 255"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {1, 1, 1, 1, 1};
 	int				c = -1;
 
@@ -49,7 +49,7 @@ static void	test_ft_isdigit(void) {
 		"'0' to '9'",
 		"':' to 255"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {1, 1, 1};
 	int				c = -1;
 
@@ -80,7 +80,7 @@ static void	test_ft_isalnum(void) {
 		"'a' to 'z'",
 		"'{' to 255"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {1, 1, 1, 1, 1, 1, 1};
 	int				c = -1;
 
@@ -119,7 +119,7 @@ static void	test_ft_isascii(void) {
 		"'\\0' to DEL",
 		"128 to 255"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {1, 1, 1};
 	int				c = 0;
 
@@ -145,7 +145,7 @@ static void	test_ft_isprint(void) {
 		"' ' to '~'",
 		"DEL to 255"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {1, 1, 1};
 	int				c = -1;
 
@@ -188,7 +188,7 @@ static void	test_ft_strlen(void) {
 		"'hello'",
 		"NULL (should crash)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strlen_empty_test),
 		!forked_test(ft_strlen_hello_test),
@@ -245,7 +245,7 @@ static void	test_ft_memset(void) {
 		"unsigned char (200)",
 		"NULL (should crash)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_memset_basic_test),
 		!forked_test(ft_memset_zero_test),
@@ -287,7 +287,7 @@ static void	test_ft_bzero(void) {
 		"bzero 5 bytes",
 		"bzero all"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_bzero_5_bytes_test),
 		!forked_test(ft_bzero_all_test)
@@ -341,7 +341,7 @@ static void	test_ft_memcpy(void) {
 		"NULL src, n = 0 (no crash)",
 		"NULL (should crash)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_memcpy_basic_test),
 		!forked_test(ft_memcpy_partial_test),
@@ -439,7 +439,7 @@ static void	test_ft_memmove(void) {
 		"NULL src, n = 0 (no crash)",
 		"NULL (should crash)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_memmove_forward_test),
 		!forked_test(ft_memmove_backward_test),
@@ -487,7 +487,7 @@ static void	test_ft_strlcpy(void) {
 		"truncation",
 		"size 0"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strlcpy_basic_test),
 		!forked_test(ft_strlcpy_truncation_test),
@@ -577,7 +577,7 @@ static void	test_ft_strlcat(void) {
 		"empty dst",
 		"no room for concat"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strlcat_basic_test),
 		!forked_test(ft_strlcat_truncation_test),
@@ -603,7 +603,7 @@ static void	test_ft_toupper(void) {
 		"'a' to 'z'",
 		"'{' to 255"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {1, 1, 1};
 	int				c = -2;
 
@@ -630,7 +630,7 @@ static void	test_ft_tolower(void) {
 		"'A' to 'Z'",
 		"'[' to 255"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {1, 1, 1};
 	int				c = -2;
 
@@ -715,7 +715,7 @@ static void	test_ft_strchr(void) {
 		"find c > 255 (wraps to char)",
 		"NULL (should crash)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strchr_find_o_test),
 		!forked_test(ft_strchr_find_W_test),
@@ -800,7 +800,7 @@ static void	test_ft_strrchr(void) {
 		"find c > 255 (wraps to char)",
 		"NULL (should crash)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strrchr_find_last_o_test),
 		!forked_test(ft_strrchr_find_W_test),
@@ -878,7 +878,7 @@ static void	test_ft_strncmp(void) {
 		"SIZE_MAX",
 		"NULL (should crash)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strncmp_equal_test),
 		!forked_test(ft_strncmp_different_test),
@@ -950,7 +950,7 @@ static void	test_ft_memchr(void) {
 		"find c > 255 (wraps to char)",
 		"NULL"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_memchr_find_o_test),
 		!forked_test(ft_memchr_find_W_test),
@@ -1014,7 +1014,7 @@ static void	test_ft_memcmp(void) {
 		"unsigned char > 127 (\\200 vs \\0)",
 		"unsigned char symmetry"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_memcmp_equal_test),
 		!forked_test(ft_memcmp_different_test),
@@ -1087,7 +1087,7 @@ static void	test_ft_strnstr(void) {
 		"needle cut by len",
 		"needle longer than haystack"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strnstr_find_world_test),
 		!forked_test(ft_strnstr_find_o_test),
@@ -1199,7 +1199,7 @@ static void	test_ft_atoi(void) {
 		"trailing junk ('42abc')",
 		"NULL (should crash)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_atoi_whitespace_plus_test),
 		!forked_test(ft_atoi_whitespace_minus_test),
@@ -1270,7 +1270,7 @@ static void	test_ft_calloc(void) {
 		"count = 0",
 		"size = 0"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_calloc_all_zeros_test),
 		!forked_test(ft_calloc_overflow_test),
@@ -1304,7 +1304,7 @@ static void	test_ft_strdup(void) {
 		"basic dup",
 		"empty string"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strdup_basic_test),
 		!forked_test(ft_strdup_empty_test)
@@ -1414,7 +1414,7 @@ static void	test_ft_substr(void) {
 		"source not modified",
 		"NULL"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_substr_basic_test),
 		!forked_test(ft_substr_from_start_test),
@@ -1489,7 +1489,7 @@ static void	test_ft_strjoin(void) {
 		"NULL s2",
 		"both NULL"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strjoin_basic_test),
 		!forked_test(ft_strjoin_empty_s1_test),
@@ -1588,7 +1588,7 @@ static void	test_ft_strtrim(void) {
 		"both NULL",
 		"source not modified"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strtrim_spaces_test),
 		!forked_test(ft_strtrim_custom_set_test),
@@ -1687,7 +1687,7 @@ static void	test_ft_split(void) {
 		"malloc fail #4 (word 3)",
 		"malloc fail #5 (other)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[num_tests];
 
 	passed[0] = !forked_test(ft_split_basic_test);
@@ -1754,7 +1754,7 @@ static void	test_ft_itoa(void) {
 		"INT_MIN",
 		"INT_MAX"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_itoa_42_test),
 		!forked_test(ft_itoa_minus_42_test),
@@ -1818,7 +1818,7 @@ static void	test_ft_strmapi(void) {
 		"both NULL",
 		"source not modified"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_strmapi_basic_test),
 		!forked_test(ft_strmapi_empty_test),
@@ -1866,7 +1866,7 @@ static void	test_ft_striteri(void) {
 		"f = NULL",
 		"both NULL"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_striteri_basic_test),
 		!forked_test(ft_striteri_null_input_test),
@@ -1933,7 +1933,7 @@ static void	test_ft_putchar_fd(void) {
 		"'A' and 'B'",
 		"'0'"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_putchar_AB_test),
 		!forked_test(ft_putchar_0_test)
@@ -1969,7 +1969,7 @@ static void	test_ft_putstr_fd(void) {
 		"'Hello, World!'",
 		"NULL"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_putstr_hello_test),
 		!forked_test(ft_putstr_null_test)
@@ -2011,7 +2011,7 @@ static void	test_ft_putendl_fd(void) {
 		"empty string with newline",
 		"NULL"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_putendl_hello_test),
 		!forked_test(ft_putendl_empty_test),
@@ -2063,7 +2063,7 @@ static void	test_ft_putnbr_fd(void) {
 		"INT_MIN",
 		"INT_MAX"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_putnbr_42_test),
 		!forked_test(ft_putnbr_minus_42_test),

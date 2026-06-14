@@ -24,6 +24,11 @@ extern int	g_malloc_fail_at;
 extern int	g_tests_failed;
 
 // =============================
+// 🪄 Macro(s)
+// =============================
+# define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*(arr)))
+
+// =============================
 // 📋 Function prototypes
 // =============================
 void		*__real_malloc(size_t size);

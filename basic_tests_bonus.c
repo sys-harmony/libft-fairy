@@ -36,7 +36,7 @@ static void	test_ft_lstnew(void) {
 		"basic",
 		"with NULL content"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {
 		!forked_test(ft_lstnew_basic_test),
 		!forked_test(ft_lstnew_null_content_test)
@@ -108,7 +108,7 @@ static void	test_ft_lstadd_front(void) {
 		"NULL new",
 		"NULL both"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {
 		!forked_test(ft_lstadd_front_basic_test),
 		!forked_test(ft_lstadd_front_empty_list_test),
@@ -141,7 +141,7 @@ static void	test_ft_lstsize(void) {
 		"basic",
 		"NULL"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_lstsize_basic_test),
 		!forked_test(ft_lstsize_null_test)
@@ -171,7 +171,7 @@ static void	test_ft_lstlast(void) {
 		"basic",
 		"NULL"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_lstlast_basic_test),
 		!forked_test(ft_lstlast_null_test)
@@ -242,7 +242,7 @@ static void	test_ft_lstadd_back(void) {
 		"NULL new",
 		"NULL both"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_lstadd_back_basic_test),
 		!forked_test(ft_lstadd_back_empty_list_test),
@@ -310,7 +310,7 @@ static void	test_ft_lstdelone(void)
 		"NULL function",
 		"NULL both"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	const int		passed[] = {
 		!forked_test(ft_lstdelone_free_once_test),
 		!forked_test(ft_lstdelone_remaining_nodes_test),
@@ -391,7 +391,7 @@ static void	test_ft_lstclear(void) {
 		"NULL function",
 		"NULL both"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {
 		!forked_test(ft_lstclear_basic_test),
 		!forked_test(ft_lstclear_del_no_free_test),
@@ -448,7 +448,7 @@ static void	test_ft_lstiter(void) {
 		"NULL function",
 		"NULL both"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[] = {
 		!forked_test(ft_lstiter_basic_test),
 		!forked_test(ft_lstiter_null_list_test),
@@ -533,7 +533,7 @@ static void	test_ft_lstmap(void) {
 		"malloc fail #5 (node 3)",
 		"malloc fail #6 (content 3)"
 	};
-	const size_t	num_tests = sizeof(tests) / sizeof(*tests);
+	const size_t	num_tests = ARRAY_SIZE(tests);
 	int				passed[num_tests];
 
 	passed[0] = !forked_test(ft_lstmap_basic_test);
