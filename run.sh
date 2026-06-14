@@ -28,10 +28,46 @@ TMP_DIR="/tmp/libft_fairy_$$"
 
 mkdir -p "$TMP_DIR"
 
+# ---- result accumulators (init up front so the EXIT trap is set -u safe) ----
+NORM_TEST_RES=0
+PROTO_TEST_RES=0
+BONUS_PROTO_TEST_RES=0
+MAKE_ERRORS=0
+BUILD_FAIL=0
+EXTERN_TEST_RES=0
+BASIC_TESTS_RES=0
+BONUS_BASIC_TESTS_RES=0
+LEAK_TESTS_RES=0
+BONUS_LEAK_TESTS_RES=0
+BONUS_VERSION=0
+
+# ---- alignment helpers ------------------------------------------------------
+# Status words are right-aligned with \033[<n>G (absolute cursor column), so
+# emoji width and label length never shift them — no tab arithmetic.
 COL=27
-ok()      { printf "\033[${COL}G  Done\n"; }
-fail()    { printf "\033[${COL}G${RED}Failed${RESET}\n"; }
-timeout_() { printf "\033[${COL}G${YELLOW}Timeout${RESET}\n"; }
+ok()       { printf "\033[${COL}G  Done\n"; }
+fail()     { printf "\033[${COL}G${RED}Failed${RESET}\n"; }
+timeout_() { printf "\033[26G${YELLOW}Timeout${RESET}\n"; }
+
+tests_passed() {
+    [[ $NORM_TEST_RES -eq 0 && $PROTO_TEST_RES -eq 0 && $BONUS_PROTO_TEST_RES -eq 0 \
+        && $MAKE_ERRORS -eq 0 && $BUILD_FAIL -eq 0 && $EXTERN_TEST_RES -eq 0 \
+        && $BASIC_TESTS_RES -eq 0 && $BONUS_BASIC_TESTS_RES -eq 0 \
+        && $LEAK_TESTS_RES -eq 0 && $BONUS_LEAK_TESTS_RES -eq 0 ]]
+}
+
+print_result() {
+    echo ""
+    if tests_passed; then
+        echo -e "${GREEN}╔══════════════════════════════╗${RESET}"
+        echo -e "${GREEN}║      OH MY, YOU PASSED!      ║${RESET}"
+        echo -e "${GREEN}╚══════════════════════════════╝${RESET}"
+    else
+        echo -e "${RED}╔══════════════════════════════╗${RESET}"
+        echo -e "${RED}║     OH NO... YOU FAILED!     ║${RESET}"
+        echo -e "${RED}╚══════════════════════════════╝${RESET}"
+    fi
+}
 
 cleanup() {
     echo ""
@@ -43,7 +79,7 @@ cleanup() {
     echo ""
 }
 
-trap cleanup EXIT INT TERM
+trap 'print_result; cleanup' EXIT INT TERM
 
 check_external_functions() {
     local func=$1
@@ -81,31 +117,33 @@ check_externals_batch() {
     return $failed
 }
 
-run_basic_test() {
+# runs a plain tester, appends its output to .results, returns its exit code
+run_plain() {
     local tester=$1
-    local out_file=$2
-    local append=$3
-    if [ "$append" = "1" ]; then
-        $tester >> "$TMP_DIR/stdout.tmp" 2>"$TMP_DIR/stderr.tmp"
+    timeout ${TIMEOUT_SEC}s "./$tester" > "$TMP_DIR/out.tmp" 2>&1
+    local rc=$?
+    if grep -q "Segmentation fault" "$TMP_DIR/out.tmp" 2>/dev/null; then
+        sed 's/^.*Segmentation fault/\n&/' "$TMP_DIR/out.tmp" >> .results
     else
-        $tester > "$TMP_DIR/stdout.tmp" 2>"$TMP_DIR/stderr.tmp"
+        cat "$TMP_DIR/out.tmp" >> .results
     fi
-    local exit_code=$?
-    cat "$TMP_DIR/stdout.tmp" >> "$out_file"
-    cat "$TMP_DIR/stderr.tmp" >> "$out_file"
-    grep "Segmentation fault" "$TMP_DIR/stderr.tmp" 2>/dev/null || true
-    return $exit_code
+    return $rc
 }
 
-run_valgrind_test() {
+# runs a tester under Valgrind (leak log -> $2), appends stray output, returns rc
+run_leak() {
     local tester=$1
-    local log_file=$2
-    { valgrind --leak-check=full --show-leak-kinds=all \
+    local log=$2
+    { timeout ${TIMEOUT_SEC}s valgrind --leak-check=full --show-leak-kinds=all \
         --errors-for-leak-kinds=all --error-exitcode=1 --track-origins=yes \
-        --log-file="$log_file" "$tester" > /dev/null; } 2>"$TMP_DIR/valgrind_stderr.tmp"
-    local exit_code=$?
-    grep "Segmentation fault" "$TMP_DIR/valgrind_stderr.tmp" 2>/dev/null || true
-    return $exit_code
+        --log-file="$log" "./$tester" > /dev/null; } > "$TMP_DIR/out.tmp" 2>&1
+    local rc=$?
+    if grep -q "Segmentation fault" "$TMP_DIR/out.tmp" 2>/dev/null; then
+        sed 's/^.*Segmentation fault/\n&/' "$TMP_DIR/out.tmp" >> .results
+    else
+        cat "$TMP_DIR/out.tmp" >> .results
+    fi
+    return $rc
 }
 
 echo ""
@@ -124,7 +162,6 @@ if echo "$NORM_OUTPUT" | grep -q "Error"; then
     echo "$NORM_OUTPUT" | grep "Error"
     echo ""
 else
-    NORM_TEST_RES=0
     ok
 fi
 
@@ -133,7 +170,6 @@ if grep -qi "bonus:" ../Makefile; then
     BONUS_VERSION=1
     printf "\033[28GBonus\n"
 else
-    BONUS_VERSION=0
     printf "\033[24G${YELLOW}Mandatory${RESET}\n"
 fi
 
@@ -189,7 +225,6 @@ for proto in "${mandatory_prototypes[@]}"; do
     fi
 done
 PROTO_TEST_RES=$errors
-BONUS_PROTO_TEST_RES=0
 if [ $BONUS_VERSION -eq 1 ]; then
     errors=0
     bonus_prototypes=(
@@ -228,9 +263,9 @@ fi
 
 printf "🔧 Checking Makefile..."
 MAKEFILE_PATH="$LIBFT_DIR/Makefile"
-MAKE_ERRORS=0
 MAKE_ISSUES=""
 if [ ! -f "$MAKEFILE_PATH" ]; then
+    MAKE_ERRORS=1
     fail
     echo ""
     echo "No Makefile found!"
@@ -292,6 +327,7 @@ MAKE_OUTPUT=$($MAKE_CMD 2>&1)
 if [ $? -eq 0 ]; then
     ok
 else
+    BUILD_FAIL=1
     fail
     echo ""
     echo -e "$MAKE_OUTPUT"
@@ -300,7 +336,6 @@ else
 fi
 
 printf "🔍 Checking externals..."
-EXTERN_TEST_RES=0
 EXTERN_OUTPUT=""
 no_extern="ft_striteri ft_isdigit ft_isalnum ft_isascii ft_isprint ft_strlen ft_memset ft_bzero ft_memcpy ft_memmove ft_strlcpy ft_strlcat ft_toupper ft_tolower ft_strchr ft_strrchr ft_strncmp ft_memchr ft_memcmp ft_strnstr ft_atoi"
 malloc_funcs="ft_strmapi ft_itoa ft_calloc ft_strdup ft_substr ft_strjoin ft_strtrim"
@@ -347,20 +382,13 @@ compile_test() {
     fi
     return 0
 }
-compile_test basic_tests.c "$BASIC_TESTER_NAME" "basic_tests"
-BASIC_TESTS_COMPILATION_RES=$?
-compile_test leak_tests.c "$LEAK_TESTER_NAME" "leak_tests"
-LEAK_TESTS_COMPILATION_RES=$?
-BONUS_BASIC_TESTS_COMPILATION_RES=0
-BONUS_LEAK_TESTS_COMPILATION_RES=0
+compile_test basic_tests.c "$BASIC_TESTER_NAME" "basic_tests" || BUILD_FAIL=1
+compile_test leak_tests.c "$LEAK_TESTER_NAME" "leak_tests" || BUILD_FAIL=1
 if [ $BONUS_VERSION -eq 1 ]; then
-    compile_test basic_tests_bonus.c "$BONUS_BASIC_TESTER_NAME" "bonus basic_tests"
-    BONUS_BASIC_TESTS_COMPILATION_RES=$?
-    compile_test leak_tests_bonus.c "$BONUS_LEAK_TESTER_NAME" "bonus leak_tests"
-    BONUS_LEAK_TESTS_COMPILATION_RES=$?
+    compile_test basic_tests_bonus.c "$BONUS_BASIC_TESTER_NAME" "bonus basic_tests" || BUILD_FAIL=1
+    compile_test leak_tests_bonus.c "$BONUS_LEAK_TESTER_NAME" "bonus leak_tests" || BUILD_FAIL=1
 fi
-if [ $BASIC_TESTS_COMPILATION_RES -eq 0 ] && [ $BONUS_BASIC_TESTS_COMPILATION_RES -eq 0 ] \
-    && [ $LEAK_TESTS_COMPILATION_RES -eq 0 ] && [ $BONUS_LEAK_TESTS_COMPILATION_RES -eq 0 ]; then
+if [ $BUILD_FAIL -eq 0 ]; then
     ok
 else
     fail
@@ -370,43 +398,18 @@ else
 fi
 
 printf "🧪 Running tests..."
-{ timeout ${TIMEOUT_SEC}s ./$BASIC_TESTER_NAME; } > "$TMP_DIR/basic_output.tmp" 2>&1
+: > .results
+run_plain "$BASIC_TESTER_NAME"
 BASIC_TESTS_RES=$?
-if grep -q "Segmentation fault" "$TMP_DIR/basic_output.tmp" 2>/dev/null; then
-    cat "$TMP_DIR/basic_output.tmp" | sed 's/^.*Segmentation fault/\n&/' > .results
-else
-    cat "$TMP_DIR/basic_output.tmp" > .results
-fi
-BONUS_BASIC_TESTS_RES=0
 if [ $BONUS_VERSION -eq 1 ]; then
-    { timeout ${TIMEOUT_SEC}s ./$BONUS_BASIC_TESTER_NAME; } > "$TMP_DIR/bonus_basic_output.tmp" 2>&1
+    run_plain "$BONUS_BASIC_TESTER_NAME"
     BONUS_BASIC_TESTS_RES=$?
-    if grep -q "Segmentation fault" "$TMP_DIR/bonus_basic_output.tmp" 2>/dev/null; then
-        cat "$TMP_DIR/bonus_basic_output.tmp" | sed 's/^.*Segmentation fault/\n&/' >> .results
-    else
-        cat "$TMP_DIR/bonus_basic_output.tmp" >> .results
-    fi
 fi
-{ timeout ${TIMEOUT_SEC}s valgrind --leak-check=full --show-leak-kinds=all \
-    --errors-for-leak-kinds=all --error-exitcode=1 --track-origins=yes \
-    --log-file="$TMP_DIR/valgrind_output.log" ./$LEAK_TESTER_NAME > /dev/null; } > "$TMP_DIR/leak_output.tmp" 2>&1
+run_leak "$LEAK_TESTER_NAME" "$TMP_DIR/valgrind_output.log"
 LEAK_TESTS_RES=$?
-if grep -q "Segmentation fault" "$TMP_DIR/leak_output.tmp" 2>/dev/null; then
-    cat "$TMP_DIR/leak_output.tmp" | sed 's/^.*Segmentation fault/\n&/' >> .results
-else
-    cat "$TMP_DIR/leak_output.tmp" >> .results
-fi
-BONUS_LEAK_TESTS_RES=0
 if [ $BONUS_VERSION -eq 1 ]; then
-    { timeout ${TIMEOUT_SEC}s valgrind --leak-check=full --show-leak-kinds=all \
-        --errors-for-leak-kinds=all --error-exitcode=1 --track-origins=yes \
-        --log-file="$TMP_DIR/bonus_valgrind_output.log" ./$BONUS_LEAK_TESTER_NAME > /dev/null; } > "$TMP_DIR/bonus_leak_output.tmp" 2>&1
+    run_leak "$BONUS_LEAK_TESTER_NAME" "$TMP_DIR/bonus_valgrind_output.log"
     BONUS_LEAK_TESTS_RES=$?
-    if grep -q "Segmentation fault" "$TMP_DIR/bonus_leak_output.tmp" 2>/dev/null; then
-        cat "$TMP_DIR/bonus_leak_output.tmp" | sed 's/^.*Segmentation fault/\n&/' >> .results
-    else
-        cat "$TMP_DIR/bonus_leak_output.tmp" >> .results
-    fi
 fi
 if [ $LEAK_TESTS_RES -ne 0 ] || [ $VERBOSE -eq 1 ]; then
     {
@@ -429,28 +432,12 @@ fi
 if [ $BASIC_TESTS_RES -eq 124 ] || [ $BONUS_BASIC_TESTS_RES -eq 124 ] \
     || [ $LEAK_TESTS_RES -eq 124 ] || [ $BONUS_LEAK_TESTS_RES -eq 124 ]; then
     timeout_
-elif [ $BASIC_TESTS_RES -eq 0 ] && [ $BONUS_BASIC_TESTS_RES -eq 0 ] \
-    && [ $LEAK_TESTS_RES -eq 0 ] && [ $BONUS_LEAK_TESTS_RES -eq 0 ]; then
+elif tests_passed; then
     ok
 else
     fail
 fi
 cat .results
-echo ""
 
-[ $NORM_TEST_RES -eq 0 ] && [ $PROTO_TEST_RES -eq 0 ] \
-    && [ $BONUS_PROTO_TEST_RES -eq 0 ] && [ $EXTERN_TEST_RES -eq 0 ] \
-    && [ $BASIC_TESTS_RES -eq 0 ] && [ $BONUS_BASIC_TESTS_RES -eq 0 ] \
-    && [ $LEAK_TESTS_RES -eq 0 ] && [ $BONUS_LEAK_TESTS_RES -eq 0 ]
-EXIT_CODE=$?
-if [ $EXIT_CODE -eq 0 ]; then
-    echo -e "${GREEN}╔══════════════════════════════╗${RESET}"
-    echo -e "${GREEN}║      OH MY, YOU PASSED!      ║${RESET}"
-    echo -e "${GREEN}╚══════════════════════════════╝${RESET}"
-else
-    echo -e "${RED}╔══════════════════════════════╗${RESET}"
-    echo -e "${RED}║     OH NO... YOU FAILED!     ║${RESET}"
-    echo -e "${RED}╚══════════════════════════════╝${RESET}"
-fi
-echo ""
-exit $EXIT_CODE
+tests_passed
+exit $?
