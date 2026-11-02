@@ -592,76 +592,78 @@ static const t_test	g_new_string_tests[] = {
 /*                           Part 2: file descriptors                         */
 /* ************************************************************************** */
 
-/* Opens a pipe: the function under test writes to p[1]. */
-static void	open_pipe(int p[2]) {
-	if (pipe(p) < 0)
-		die("libft-fairy: pipe");
+/*
+ * The fd the function under test writes to: a temp file, rewound each time.
+ * Not a pipe, which blocks for good past 64 KB: a write far too long would
+ * pass for a hang. Where writing ends gives the length.
+ */
+static int	sink(void) {
+	static FILE	*f;
+
+	if (!f && !(f = tmpfile()))
+		die("libft-fairy: tmpfile");
+	if (lseek(fileno(f), 0, SEEK_SET) < 0)
+		die("libft-fairy: lseek");
+	return fileno(f);
 }
 
-/* Reads back the pipe: exactly len bytes of expected, else fails. */
-static void	expect_written(int p[2], const char *expected, size_t len, const char *call) {
+/* What was written to the sink: exactly len bytes of expected, else fails. */
+static void	expect_written(int fd, const char *expected, size_t len, const char *call) {
 	static char	got[16384];
-	ssize_t		n;
+	off_t		n = lseek(fd, 0, SEEK_CUR);
 
-	close(p[1]);
-	n = read(p[0], got, sizeof(got) - 1);
-	close(p[0]);
-	got[n > 0 ? n : 0] = '\0';
-	EXPECT(n == (ssize_t)len && !memcmp(got, expected, len), "%s: wrote %s (%zd bytes), expected %s (%zu)",
-		call, show(got), n, show(expected), len);
+	if (pread(fd, got, n < (off_t)sizeof(got) ? n : (off_t)sizeof(got) - 1, 0) < 0)
+		die("libft-fairy: pread");
+	got[n < (off_t)sizeof(got) ? n : (off_t)sizeof(got) - 1] = '\0';
+	EXPECT(n == (off_t)len && !memcmp(got, expected, len), "%s: wrote %s (%jd bytes), expected %s (%zu)",
+		call, show(got), (intmax_t)n, show(expected), len);
 }
 
 static void	putchar_fd_test(void) {
-	int		p[2];
 	char	call[32];
+	int		fd;
 
 	for (int c = 0; c < 256; c++) {
-		open_pipe(p);
-		ft_putchar_fd(c, p[1]);
+		fd = sink();
+		ft_putchar_fd(c, fd);
 		snprintf(call, sizeof(call), "ft_putchar_fd(%d, fd)", c);
-		expect_written(p, (char []){c, 0}, 1, call);
+		expect_written(fd, (char []){c, 0}, 1, call);
 	}
 }
 
 static void	putstr_fd_test(void) {
 	static char	big[10000];
-	int			p[2];
+	int			fd;
 
 	memset(big, 'z', sizeof(big) - 1);
-	open_pipe(p);
-	ft_putstr_fd("Hello, World!", p[1]);
-	expect_written(p, "Hello, World!", 13, "ft_putstr_fd(\"Hello, World!\", fd)");
-	open_pipe(p);
-	ft_putstr_fd("", p[1]);
-	expect_written(p, "", 0, "ft_putstr_fd(\"\", fd)");
-	open_pipe(p);
-	ft_putstr_fd(big, p[1]);
-	expect_written(p, big, sizeof(big) - 1, "ft_putstr_fd(9999 chars, fd)");
+	ft_putstr_fd("Hello, World!", fd = sink());
+	expect_written(fd, "Hello, World!", 13, "ft_putstr_fd(\"Hello, World!\", fd)");
+	ft_putstr_fd("", fd = sink());
+	expect_written(fd, "", 0, "ft_putstr_fd(\"\", fd)");
+	ft_putstr_fd(big, fd = sink());
+	expect_written(fd, big, sizeof(big) - 1, "ft_putstr_fd(9999 chars, fd)");
 }
 
 static void	putendl_fd_test(void) {
-	int	p[2];
+	int	fd;
 
-	open_pipe(p);
-	ft_putendl_fd("Hello", p[1]);
-	expect_written(p, "Hello\n", 6, "ft_putendl_fd(\"Hello\", fd)");
-	open_pipe(p);
-	ft_putendl_fd("", p[1]);
-	expect_written(p, "\n", 1, "ft_putendl_fd(\"\", fd)");
+	ft_putendl_fd("Hello", fd = sink());
+	expect_written(fd, "Hello\n", 6, "ft_putendl_fd(\"Hello\", fd)");
+	ft_putendl_fd("", fd = sink());
+	expect_written(fd, "\n", 1, "ft_putendl_fd(\"\", fd)");
 }
 
 static void	putnbr_fd_test(void) {
 	const int	vals[] = {0, 1, -1, 9, -9, 10, -10, 42, -42, 100, 12345, -12345, INT_MAX, INT_MIN};
 	char		expected[16];
 	char		call[32];
-	int			p[2];
+	int			fd;
 
 	for (size_t i = 0; i < ARRAY_SIZE(vals); i++) {
 		snprintf(expected, sizeof(expected), "%d", vals[i]);
 		snprintf(call, sizeof(call), "ft_putnbr_fd(%d, fd)", vals[i]);
-		open_pipe(p);
-		ft_putnbr_fd(vals[i], p[1]);
-		expect_written(p, expected, strlen(expected), call);
+		ft_putnbr_fd(vals[i], fd = sink());
+		expect_written(fd, expected, strlen(expected), call);
 	}
 }
 
