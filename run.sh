@@ -24,8 +24,8 @@ LIBFT_A="$LIBFT_DIR/libft.a"
 MAKEFILE_PATH="$LIBFT_DIR/Makefile"
 BASIC_TESTER_NAME=".basic_tests"
 LEAK_TESTER_NAME=".leak_tests"
-BONUS_BASIC_TESTER_NAME=".basic_tests_bonus"
-BONUS_LEAK_TESTER_NAME=".leak_tests_bonus"
+LISTS_BASIC_TESTER_NAME=".basic_tests_lists"
+LISTS_LEAK_TESTER_NAME=".leak_tests_lists"
 
 for tool in gcc make valgrind norminette nm; do
     if ! command -v "$tool" > /dev/null; then
@@ -47,9 +47,9 @@ MAKE_ERRORS=0
 BUILD_FAIL=0
 EXTERN_TEST_RES=0
 BASIC_TESTS_RES=0
-BONUS_BASIC_TESTS_RES=0
+LISTS_BASIC_TESTS_RES=0
 LEAK_TESTS_RES=0
-BONUS_LEAK_TESTS_RES=0
+LISTS_LEAK_TESTS_RES=0
 INTERRUPTED=0
 
 # ---- alignment helpers ------------------------------------------------------
@@ -61,8 +61,8 @@ fail()     { printf "\033[${COL}G${RED}Failed${RESET}\n"; }
 timeout_() { printf "\033[26G${YELLOW}Timeout${RESET}\n"; }
 
 tests_ran_ok() {
-    [[ $BASIC_TESTS_RES -eq 0 && $BONUS_BASIC_TESTS_RES -eq 0 \
-        && $LEAK_TESTS_RES -eq 0 && $BONUS_LEAK_TESTS_RES -eq 0 ]]
+    [[ $BASIC_TESTS_RES -eq 0 && $LISTS_BASIC_TESTS_RES -eq 0 \
+        && $LEAK_TESTS_RES -eq 0 && $LISTS_LEAK_TESTS_RES -eq 0 ]]
 }
 
 tests_passed() {
@@ -89,7 +89,7 @@ cleanup() {
     echo ""
     printf "🧹 Cleaning up..."
     rm -rf "$TMP_DIR" $BASIC_TESTER_NAME $LEAK_TESTER_NAME \
-        $BONUS_BASIC_TESTER_NAME $BONUS_LEAK_TESTER_NAME .results
+        $LISTS_BASIC_TESTER_NAME $LISTS_LEAK_TESTER_NAME .results
     make -C $LIBFT_DIR fclean > /dev/null 2>&1
     ok
     echo ""
@@ -252,8 +252,6 @@ fi
 
 printf "🔧 Checking Makefile..."
 MAKE_ISSUES=""
-BONUS_RULE=0
-grep -Eq '^bonus\s*:' "$MAKEFILE_PATH" && BONUS_RULE=1
 for rule in all clean fclean re; do
     grep -Eq "^$rule\s*:" "$MAKEFILE_PATH" || MAKE_ISSUES+="Missing rule: $rule"$'\n'
 done
@@ -271,13 +269,11 @@ else
     grep -q -- '-std=c99' <<< "$COMPILE_CMDS" && MAKE_ISSUES+="Forbidden flag: -std=c99"$'\n'
 fi
 # nanosecond timestamps: a relink happens in the same second as the previous build
-for target in "" $([ $BONUS_RULE -eq 1 ] && echo bonus); do
-    make -C "$LIBFT_DIR" $target > /dev/null 2>&1
-    before=$(stat -c %y "$LIBFT_A" 2>/dev/null)
-    make -C "$LIBFT_DIR" $target > /dev/null 2>&1
-    [ "$(stat -c %y "$LIBFT_A" 2>/dev/null)" != "$before" ] \
-        && MAKE_ISSUES+="Unnecessary relink detected when running 'make${target:+ $target}' twice"$'\n'
-done
+make -C "$LIBFT_DIR" > /dev/null 2>&1
+LIB_TIME=$(stat -c %y "$LIBFT_A" 2>/dev/null)
+make -C "$LIBFT_DIR" > /dev/null 2>&1
+[ "$(stat -c %y "$LIBFT_A" 2>/dev/null)" != "$LIB_TIME" ] \
+    && MAKE_ISSUES+="Unnecessary relink detected when running make twice"$'\n'
 [ -f "$LIBFT_A" ] || MAKE_ISSUES+="make does not create libft.a at the root of the repository"$'\n'
 if [ -z "$MAKE_ISSUES" ]; then
     ok
@@ -289,9 +285,8 @@ else
 fi
 
 printf "📦 Building libft..."
-MAKE_CMD="make -C $LIBFT_DIR"
-[ $BONUS_RULE -eq 1 ] && MAKE_CMD="$MAKE_CMD bonus"
-if MAKE_OUTPUT=$($MAKE_CMD 2>&1); then
+# subject v19.3 has no bonus part: make alone must build Part 1, 2 and 3
+if MAKE_OUTPUT=$(make -C "$LIBFT_DIR" 2>&1); then
     ok
 else
     BUILD_FAIL=1
@@ -325,7 +320,7 @@ SYMBOLS_OUTPUT=$(nm -A "$LIBFT_A" 2>/dev/null | awk -v allowed="$ALLOWED" '
     }')
 DEFINED=$(nm -g --defined-only "$LIBFT_A" 2>/dev/null | awk '{ print $NF }')
 for func in $(grep -oE 'ft_[a-z_]+' <<< "$PROTOTYPES"); do
-    grep -qx "$func" <<< "$DEFINED" || SYMBOLS_OUTPUT+="${SYMBOLS_OUTPUT:+$'\n'}libft.a: missing function: $func"
+    grep -qx "$func" <<< "$DEFINED" || SYMBOLS_OUTPUT+="${SYMBOLS_OUTPUT:+$'\n'}libft.a: function not built by make: $func"
 done
 if [ -z "$SYMBOLS_OUTPUT" ]; then
     ok
@@ -355,8 +350,8 @@ compile_test() {
 # a test file that does not compile is reported and skipped, the others still run
 compile_test basic_tests.c "$BASIC_TESTER_NAME" || BUILD_FAIL=1
 compile_test leak_tests.c "$LEAK_TESTER_NAME" || BUILD_FAIL=1
-compile_test basic_tests_bonus.c "$BONUS_BASIC_TESTER_NAME" || BUILD_FAIL=1
-compile_test leak_tests_bonus.c "$BONUS_LEAK_TESTER_NAME" || BUILD_FAIL=1
+compile_test basic_tests_lists.c "$LISTS_BASIC_TESTER_NAME" || BUILD_FAIL=1
+compile_test leak_tests_lists.c "$LISTS_LEAK_TESTER_NAME" || BUILD_FAIL=1
 if [ $BUILD_FAIL -eq 0 ]; then
     ok
 else
@@ -369,16 +364,16 @@ printf "🧪 Running tests..."
 : > .results
 run_tester "$BASIC_TESTER_NAME"
 BASIC_TESTS_RES=$?
-run_tester "$BONUS_BASIC_TESTER_NAME"
-BONUS_BASIC_TESTS_RES=$?
+run_tester "$LISTS_BASIC_TESTER_NAME"
+LISTS_BASIC_TESTS_RES=$?
 run_tester "$LEAK_TESTER_NAME" "$TMP_DIR/valgrind_output.log"
 LEAK_TESTS_RES=$?
-run_tester "$BONUS_LEAK_TESTER_NAME" "$TMP_DIR/lists_valgrind_output.log"
-BONUS_LEAK_TESTS_RES=$?
+run_tester "$LISTS_LEAK_TESTER_NAME" "$TMP_DIR/lists_valgrind_output.log"
+LISTS_LEAK_TESTS_RES=$?
 show_valgrind_log "Part 1 & 2" "$TMP_DIR/valgrind_output.log" $LEAK_TESTS_RES
-show_valgrind_log "Part 3, linked lists" "$TMP_DIR/lists_valgrind_output.log" $BONUS_LEAK_TESTS_RES
-if [ $BASIC_TESTS_RES -eq 124 ] || [ $BONUS_BASIC_TESTS_RES -eq 124 ] \
-    || [ $LEAK_TESTS_RES -eq 124 ] || [ $BONUS_LEAK_TESTS_RES -eq 124 ]; then
+show_valgrind_log "Part 3, linked lists" "$TMP_DIR/lists_valgrind_output.log" $LISTS_LEAK_TESTS_RES
+if [ $BASIC_TESTS_RES -eq 124 ] || [ $LISTS_BASIC_TESTS_RES -eq 124 ] \
+    || [ $LEAK_TESTS_RES -eq 124 ] || [ $LISTS_LEAK_TESTS_RES -eq 124 ]; then
     timeout_
 elif tests_ran_ok; then
     ok

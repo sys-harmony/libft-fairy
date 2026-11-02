@@ -113,7 +113,7 @@ ft_split
 - **Norminette**: Validates the .c and .h files at the root of the repository
 - **README**: Checks the requirements of the subject (first line, required sections)
 - **Prototypes**: The compiler checks every prototype of libft.h against the subject (parameter names and spacing don't matter); `restrict` is forbidden
-- **Makefile**: Checks the required rules, the compiler and flags of the commands `make -n` prints, `-std=c99`, and relinks (`make` and `make bonus` run twice)
+- **Makefile**: Checks the required rules, the compiler and flags of the commands `make -n` prints, `-std=c99`, and relinks (`make` run twice)
 - **Symbols**: In every object of libft.a, ensures only allowed external functions are used, and that there is no global variable nor non-static helper
 
 ### Part 1 & 2 Functions
@@ -203,9 +203,9 @@ Dedicated leak tests for:
 libft-fairy/
 ├── run.sh                    # Main test orchestrator
 ├── basic_tests.c             # Part 1 & 2 function tests
-├── basic_tests_bonus.c       # Part 3 (linked list) function tests
+├── basic_tests_lists.c       # Part 3 (linked list) function tests
 ├── leak_tests.c              # Leak tests (Part 1 & 2)
-├── leak_tests_bonus.c        # Leak tests (Part 3)
+├── leak_tests_lists.c        # Leak tests (Part 3)
 ├── utils.c                   # Utility functions and malloc wrapper
 ├── libft_fairy.h             # Header file
 └── README.md                 # This file
@@ -226,7 +226,7 @@ Every test runs in a separate process with a timeout, so a crash or an infinite 
 Every object of libft.a is checked with `nm`, wherever the .o files are built and whatever functions each file holds:
 - Only authorized external functions: `malloc` (allocating functions), `free` (`ft_split`, `ft_lstdelone`, `ft_lstclear`, `ft_lstmap`), `write` (`ft_put*_fd`), none for the others
 - No global variable, no non-static helper function
-- Every function of the subject is defined
+- Every function of the subject is built by `make` (there is no bonus part in v19.3, Part 3 is mandatory)
 
 ## 🐛 Debugging
 
