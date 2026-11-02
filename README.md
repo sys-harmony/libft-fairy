@@ -1,19 +1,22 @@
 # 🧚 libft-fairy
 
-A comprehensive tester for 42's **libft** project, featuring memory leak detection, edge case testing, and rigorous validation.
+A comprehensive tester for 42's **libft** project (subject v19.3, where the linked list functions are part of the mandatory part), featuring memory leak detection, edge case testing, and rigorous validation.
 
 ## ✨ Features
 
-- ✅ Complete tests for all functions (mandatory + bonus)
+- ✅ Complete tests for all functions (Part 1, 2 and 3)
 - 🔍 Automatic verification with **norminette**
-- 📋 Prototype validation in libft.h
-- ⚙️ Makefile rules verification (NAME, all, clean, fclean, re)
-- 🔧 Compilation flags check (-Wall -Wextra -Werror)
-- 🔎 External function usage verification
+- 📖 README.md requirements check (italic first line, Description / Instructions / Resources sections)
+- 📋 Prototype validation in libft.h, done by the compiler
+- ⚙️ Makefile rules verification (NAME, all, clean, fclean, re) and relink detection
+- 🔧 Compiler and flags check (cc -Wall -Wextra -Werror) on the commands make really runs
+- 🔎 External functions, global variables and non-static helpers detection
 - 💧 Memory leak detection with **Valgrind**
+- 📏 Allocation size check (catches the classic missing `+ 1` for the `'\0'`)
 - 🚨 Edge case testing (NULL, overflow, boundary cases)
 - 🧪 Malloc failure simulation for robustness
-- 📊 Clear and colorful output
+- ⏱️ Per-test timeout, so an infinite loop only fails the test that hangs
+- 📊 Clear and colorful output, with the reason of each failure
 - 🔇 Optional verbose mode for detailed results
 
 ## 📋 Prerequisites
@@ -73,22 +76,18 @@ The tester displays a comprehensive validation process:
 ╚═══════════════════════════╝
 
 📝 Checking norm...         Done
-🏷️  Checking version...      Mandatory
-📋 Checking prototypes...    Done
-⚙️  Checking Makefile...     Done
+📖 Checking README...        Done
+📑 Checking prototypes...    Done
+🔧 Checking Makefile...      Done
 📦 Building libft...         Done
-🔍 Checking externals...     Done
+🔍 Checking symbols...       Done
 🔨 Building tests...         Done
 🧪 Running tests...          Done
 
 ========================================
 ft_isalpha
 ========================================
-[OK]  Test EOF to '?'
-[OK]  Test 'A' to 'Z'
-[OK]  Test '[' to '`'
-[OK]  Test 'a' to 'z'
-[OK]  Test '{' to 255
+[OK]  Test EOF to 255
 ...
 
 ╔═══════════════════════════╗
@@ -96,25 +95,32 @@ ft_isalpha
 ╚═══════════════════════════╝
 ```
 
-On failure, details of failed tests will be displayed, along with Valgrind logs if memory leaks are detected.
+On failure, details of failed tests will be displayed with their reason, along with Valgrind logs if memory leaks are detected:
+
+```
+========================================
+ft_split
+========================================
+[OK]  Test basic split
+...
+[KO]  Test malloc fail #2 (word 1)  (Segmentation fault)
+```
 
 ## 🧪 Tests Covered
 
 ### Pre-compilation Checks
 
-- **Norminette**: Validates all .c and .h files
-- **Prototypes**: Verifies exact function signatures in libft.h
-- **Makefile**: Checks for required rules and proper compilation flags
-- **External functions**: Ensures only allowed functions are used per function
+- **Norminette**: Validates the .c and .h files at the root of the repository
+- **README**: Checks the requirements of the subject (first line, required sections)
+- **Prototypes**: The compiler checks every prototype of libft.h against the subject (parameter names and spacing don't matter); `restrict` is forbidden
+- **Makefile**: Checks the required rules, the compiler and flags of the commands `make -n` prints, `-std=c99`, and relinks (`make` and `make bonus` run twice)
+- **Symbols**: In every object of libft.a, ensures only allowed external functions are used, and that there is no global variable nor non-static helper
 
-### Mandatory Functions
+### Part 1 & 2 Functions
 
 #### Character Classification
-- `ft_isalpha`: Tests all ASCII ranges (EOF to 255)
-- `ft_isdigit`: Validates digit detection
-- `ft_isalnum`: Combined alphanumeric tests
-- `ft_isascii`: ASCII range validation
-- `ft_isprint`: Printable character detection
+- `ft_isalpha`, `ft_isdigit`, `ft_isalnum`, `ft_isascii`, `ft_isprint`: Compared to the libc for every value from EOF to 255, must return exactly 1 on a match (subject rule)
+- `ft_toupper`/`ft_tolower`: Compared to the libc for every value from EOF to 255
 
 #### String Manipulation
 - `ft_strlen`: Length calculation including NULL handling
@@ -133,10 +139,9 @@ On failure, details of failed tests will be displayed, along with Valgrind logs 
 
 #### Conversion
 - `ft_atoi`: Integer parsing with whitespace and sign handling
-- `ft_toupper`/`ft_tolower`: Case conversion for all ASCII
 
 #### Allocation Functions
-- `ft_calloc`: Zero-initialization with overflow protection
+- `ft_calloc`: Zero-initialization with overflow protection, freeable pointer when nmemb or size is 0
 - `ft_strdup`: String duplication with empty string handling
 
 #### String Creation
@@ -156,7 +161,7 @@ On failure, details of failed tests will be displayed, along with Valgrind logs 
 - `ft_putendl_fd`: String with newline
 - `ft_putnbr_fd`: Number output (INT_MIN/MAX)
 
-### Bonus Functions
+### Part 3 Functions
 
 #### List Operations
 - `ft_lstnew`: Node creation with NULL content
@@ -185,7 +190,7 @@ On failure, details of failed tests will be displayed, along with Valgrind logs 
 
 Dedicated leak tests for:
 - All allocation functions (ft_calloc, ft_strdup, ft_substr, ft_strjoin, ft_strtrim, ft_split, ft_itoa, ft_strmapi)
-- Bonus list functions (ft_lstnew, ft_lstdelone, ft_lstclear)
+- List functions (ft_lstnew, ft_lstdelone, ft_lstclear)
 - ft_lstmap with three content scenarios:
   - Static content
   - Shared content
@@ -197,10 +202,10 @@ Dedicated leak tests for:
 ```
 libft-fairy/
 ├── run.sh                    # Main test orchestrator
-├── basic_tests.c             # Mandatory function tests
-├── basic_tests_bonus.c       # Bonus function tests
-├── leak_tests.c              # Leak tests (mandatory)
-├── leak_tests_bonus.c        # Leak tests (bonus)
+├── basic_tests.c             # Part 1 & 2 function tests
+├── basic_tests_bonus.c       # Part 3 (linked list) function tests
+├── leak_tests.c              # Leak tests (Part 1 & 2)
+├── leak_tests_bonus.c        # Leak tests (Part 3)
 ├── utils.c                   # Utility functions and malloc wrapper
 ├── libft_fairy.h             # Header file
 └── README.md                 # This file
@@ -210,19 +215,18 @@ libft-fairy/
 
 ### Malloc Failure Simulation
 
-The tester uses a custom malloc wrapper (`__wrap_malloc`) to simulate allocation failures at specific points, ensuring your functions properly handle malloc errors and don't leak memory on failure.
+The tester uses a custom malloc wrapper (`__wrap_malloc`) to simulate allocation failures at specific points, ensuring your functions return NULL on malloc errors and don't leak memory on failure. The wrapper also records the size of each allocation, so a returned string must fit in the memory allocated for it.
 
 ### Forked Tests
 
-Crash-prone tests (NULL dereferences, segfaults) run in separate processes to prevent tester crashes, allowing comprehensive validation without interruption.
+Every test runs in a separate process with a timeout, so a crash or an infinite loop only fails that test. A failed test shows why: `wrong result`, the signal that killed it (`Segmentation fault`...), `timeout`, or `did not crash` for tests expecting a crash.
 
-### External Function Validation
+### Symbol Validation
 
-Each function is checked with `nm -u` to ensure only authorized external functions are used:
-- Functions with no external calls allowed
-- Functions allowed to use only `malloc`
-- Functions allowed to use only `write`
-- `ft_split` allowed to use `malloc` and `free`
+Every object of libft.a is checked with `nm`, wherever the .o files are built and whatever functions each file holds:
+- Only authorized external functions: `malloc` (allocating functions), `free` (`ft_split`, `ft_lstdelone`, `ft_lstclear`, `ft_lstmap`), `write` (`ft_put*_fd`), none for the others
+- No global variable, no non-static helper function
+- Every function of the subject is defined
 
 ## 🐛 Debugging
 
@@ -231,14 +235,12 @@ If a test fails:
 1. **Verbose mode**: Run `./run.sh -v` to see all test details
 2. **Valgrind logs**: Complete output displayed for memory issues
 3. **Norminette**: Specific errors shown with file and line
-4. **Results file**: Check `.results` for detailed output
-5. **Prototype errors**: Exact expected signatures displayed
+4. **Prototype errors**: Exact expected signatures displayed
 
 ## ⚠️ Limitations
 
 - Tested only on Linux (uses `fork`, `nm`, and Valgrind)
 - Requires specific directory structure (tester in libft subfolder)
-- Assumes standard prototype format in libft.h
 - May produce false positives if non-standard implementation approaches are used
 
 ## 🤝 Contributing

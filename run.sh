@@ -7,7 +7,7 @@ GREEN='\033[0;32m'
 PINK='\033[0;95m'
 YELLOW='\033[0;33m'
 RESET='\033[0m'
-TIMEOUT_SEC=2
+TIMEOUT_SEC=10	# per test binary; each forked test also has its own TEST_TIMEOUT
 
 VERBOSE=0
 for arg in "$@"; do
@@ -18,20 +18,31 @@ for arg in "$@"; do
     esac
 done
 
+cd "$(dirname "$0")" || exit 1
 LIBFT_DIR=".."
+LIBFT_A="$LIBFT_DIR/libft.a"
+MAKEFILE_PATH="$LIBFT_DIR/Makefile"
 BASIC_TESTER_NAME=".basic_tests"
 LEAK_TESTER_NAME=".leak_tests"
 BONUS_BASIC_TESTER_NAME=".basic_tests_bonus"
 BONUS_LEAK_TESTER_NAME=".leak_tests_bonus"
-TESTER_DIR=$(basename "$(pwd)")
-TMP_DIR="/tmp/libft_fairy_$$"
 
-mkdir -p "$TMP_DIR"
+for tool in gcc make valgrind norminette nm; do
+    if ! command -v "$tool" > /dev/null; then
+        echo "libft-fairy: '$tool' is required but not installed"
+        exit 1
+    fi
+done
+if [ ! -f "$LIBFT_DIR/libft.h" ] || [ ! -f "$MAKEFILE_PATH" ]; then
+    echo "libft-fairy: no libft.h or Makefile in $(cd "$LIBFT_DIR" && pwd), clone me inside your libft repository"
+    exit 1
+fi
+TMP_DIR=$(mktemp -d /tmp/libft_fairy_XXXXXX)
 
 # ---- result accumulators (init up front so the EXIT trap is set -u safe) ----
 NORM_TEST_RES=0
+README_TEST_RES=0
 PROTO_TEST_RES=0
-BONUS_PROTO_TEST_RES=0
 MAKE_ERRORS=0
 BUILD_FAIL=0
 EXTERN_TEST_RES=0
@@ -39,7 +50,7 @@ BASIC_TESTS_RES=0
 BONUS_BASIC_TESTS_RES=0
 LEAK_TESTS_RES=0
 BONUS_LEAK_TESTS_RES=0
-BONUS_VERSION=0
+INTERRUPTED=0
 
 # ---- alignment helpers ------------------------------------------------------
 # Status words are right-aligned with \033[<n>G (absolute cursor column), so
@@ -49,16 +60,21 @@ ok()       { printf "\033[${COL}G  Done\n"; }
 fail()     { printf "\033[${COL}G${RED}Failed${RESET}\n"; }
 timeout_() { printf "\033[26G${YELLOW}Timeout${RESET}\n"; }
 
-tests_passed() {
-    [[ $NORM_TEST_RES -eq 0 && $PROTO_TEST_RES -eq 0 && $BONUS_PROTO_TEST_RES -eq 0 \
-        && $MAKE_ERRORS -eq 0 && $BUILD_FAIL -eq 0 && $EXTERN_TEST_RES -eq 0 \
-        && $BASIC_TESTS_RES -eq 0 && $BONUS_BASIC_TESTS_RES -eq 0 \
+tests_ran_ok() {
+    [[ $BASIC_TESTS_RES -eq 0 && $BONUS_BASIC_TESTS_RES -eq 0 \
         && $LEAK_TESTS_RES -eq 0 && $BONUS_LEAK_TESTS_RES -eq 0 ]]
+}
+
+tests_passed() {
+    [[ $NORM_TEST_RES -eq 0 && $README_TEST_RES -eq 0 && $PROTO_TEST_RES -eq 0 \
+        && $MAKE_ERRORS -eq 0 && $BUILD_FAIL -eq 0 && $EXTERN_TEST_RES -eq 0 ]] && tests_ran_ok
 }
 
 print_result() {
     echo ""
-    if tests_passed; then
+    if [ $INTERRUPTED -eq 1 ]; then
+        echo -e "${YELLOW}Interrupted${RESET}"
+    elif tests_passed; then
         echo -e "${GREEN}╔══════════════════════════════╗${RESET}"
         echo -e "${GREEN}║      OH MY, YOU PASSED!      ║${RESET}"
         echo -e "${GREEN}╚══════════════════════════════╝${RESET}"
@@ -72,78 +88,51 @@ print_result() {
 cleanup() {
     echo ""
     printf "🧹 Cleaning up..."
-    rm -rf "$TMP_DIR" *.o $BASIC_TESTER_NAME $LEAK_TESTER_NAME \
+    rm -rf "$TMP_DIR" $BASIC_TESTER_NAME $LEAK_TESTER_NAME \
         $BONUS_BASIC_TESTER_NAME $BONUS_LEAK_TESTER_NAME .results
     make -C $LIBFT_DIR fclean > /dev/null 2>&1
     ok
     echo ""
 }
 
-trap 'print_result; cleanup' EXIT INT TERM
+# INT/TERM only exit: the EXIT trap then prints the result and cleans up, once
+trap 'INTERRUPTED=1; exit 130' INT TERM
+trap 'print_result; cleanup' EXIT
 
-check_external_functions() {
-    local func=$1
-    local allowed=$2
-    local obj_file="$LIBFT_DIR/${func}.o"
-    [ ! -f "$obj_file" ] && return 0
-    local externals
-    externals=$(nm -u "$obj_file" 2>/dev/null | awk '{print $2}')
-    local forbidden=""
-    for ext in $externals; do
-        [[ "$ext" == ft_* || "$ext" == __* ]] && continue
-        [[ ! " $allowed " =~ " $ext " ]] && forbidden="$forbidden $ext"
-    done
-    if [ -n "$forbidden" ]; then
-        echo "$func: forbidden function detected:$forbidden"
-        return 1
-    fi
-    return 0
-}
-
-check_externals_batch() {
-    local funcs=$1
-    local allowed=$2
-    local output=""
-    local failed=0
-    for func in $funcs; do
-        local result
-        result=$(check_external_functions "$func" "$allowed" 2>&1)
-        if [ $? -ne 0 ]; then
-            failed=1
-            output="${output}${result}\n"
-        fi
-    done
-    echo -e "$output"
-    return $failed
-}
-
-# runs a plain tester, appends its output to .results, returns its exit code
-run_plain() {
+# runs a test binary (under Valgrind when a log file is given), appends its output to .results
+run_tester() {
     local tester=$1
-    timeout ${TIMEOUT_SEC}s "./$tester" > "$TMP_DIR/out.tmp" 2>&1
-    local rc=$?
-    if grep -q "Segmentation fault" "$TMP_DIR/out.tmp" 2>/dev/null; then
-        sed 's/^.*Segmentation fault/\n&/' "$TMP_DIR/out.tmp" >> .results
-    else
-        cat "$TMP_DIR/out.tmp" >> .results
+    local log=${2:-}
+    local cmd=("./$tester")
+    local rc
+    [ -x "$tester" ] || return 0
+    [ -n "$log" ] && cmd=(valgrind --leak-check=full --show-leak-kinds=all \
+        --errors-for-leak-kinds=all --error-exitcode=1 --track-origins=yes --log-file="$log" "./$tester")
+    # the subshell keeps bash's own "Segmentation fault ... <command>" message out of the output
+    ( timeout "$TIMEOUT_SEC" "${cmd[@]}" > "$TMP_DIR/out.tmp" 2>&1; exit $? ) 2> /dev/null
+    rc=$?
+    cat "$TMP_DIR/out.tmp" >> .results
+    if [ $rc -eq 124 ]; then
+        echo -e "\n${YELLOW}$tester: timeout after ${TIMEOUT_SEC}s${RESET}" >> .results
+    elif [ $rc -gt 128 ]; then
+        echo -e "\n${RED}$tester: crashed (SIG$(kill -l $((rc - 128))))${RESET}" >> .results
     fi
     return $rc
 }
 
-# runs a tester under Valgrind (leak log -> $2), appends stray output, returns rc
-run_leak() {
-    local tester=$1
+show_valgrind_log() {
+    local title=$1
     local log=$2
-    { timeout ${TIMEOUT_SEC}s valgrind --leak-check=full --show-leak-kinds=all \
-        --errors-for-leak-kinds=all --error-exitcode=1 --track-origins=yes \
-        --log-file="$log" "./$tester" > /dev/null; } > "$TMP_DIR/out.tmp" 2>&1
-    local rc=$?
-    if grep -q "Segmentation fault" "$TMP_DIR/out.tmp" 2>/dev/null; then
-        sed 's/^.*Segmentation fault/\n&/' "$TMP_DIR/out.tmp" >> .results
-    else
-        cat "$TMP_DIR/out.tmp" >> .results
-    fi
-    return $rc
+    local rc=$3
+    [ -f "$log" ] || return 0
+    [ "$rc" -ne 0 ] || [ $VERBOSE -eq 1 ] || return 0
+    {
+        echo ""
+        echo "════════════════════════════════════════"
+        echo "VALGRIND OUTPUT ($title)"
+        echo "════════════════════════════════════════"
+        cat "$log"
+    } >> .results
 }
 
 echo ""
@@ -153,8 +142,8 @@ echo -e "${PINK}╚════════════════════�
 echo ""
 
 printf "📝 Checking norm..."
-NORM_OUTPUT=$(find $LIBFT_DIR -type d -name "$TESTER_DIR" -prune -o \
-    \( -name "*.c" -o -name "*.h" \) -type f -print | xargs -r norminette 2>&1)
+# the subject requires every file at the root of the repository
+NORM_OUTPUT=$(norminette "$LIBFT_DIR"/*.c "$LIBFT_DIR"/*.h 2>&1)
 if echo "$NORM_OUTPUT" | grep -q "Error"; then
     NORM_TEST_RES=1
     fail
@@ -165,274 +154,233 @@ else
     ok
 fi
 
-printf "🔖 Checking version..."
-if grep -qi "bonus:" ../Makefile; then
-    BONUS_VERSION=1
-    printf "\033[28GBonus\n"
+printf "📖 Checking README..."
+README="$LIBFT_DIR/README.md"
+README_ISSUES=""
+if [ ! -f "$README" ]; then
+    README_ISSUES+="No README.md at the root of the repository"$'\n'
 else
-    printf "\033[24G${YELLOW}Mandatory${RESET}\n"
+    head -n 1 "$README" | grep -Eq '^[*_]+This project has been created as part of the 42 curriculum by .+[*_]+[[:space:]]*$' \
+        || README_ISSUES+="First line must be in italics: *This project has been created as part of the 42 curriculum by <login>.*"$'\n'
+    for section in Description Instructions Resources; do
+        grep -Eiq "^#+[[:space:]]*$section" "$README" || README_ISSUES+="Missing section: $section"$'\n'
+    done
+fi
+if [ -z "$README_ISSUES" ]; then
+    ok
+else
+    README_TEST_RES=1
+    fail
+    echo ""
+    printf '%s\n' "$README_ISSUES"
 fi
 
 printf "📑 Checking prototypes..."
-errors=0
-error_messages=""
-LIBFT_H="../libft.h"
-mandatory_prototypes=(
-    'int\t+ft_atoi\(const char \*nptr\);::int ft_atoi(const char *nptr);'
-    'void\t+ft_bzero\(void \*s, size_t n\);::void ft_bzero(void *s, size_t n);'
-    'void\t+\*ft_calloc\(size_t nmemb, size_t size\);::void *ft_calloc(size_t nmemb, size_t size);'
-    'int\t+ft_isalnum\(int c\);::int ft_isalnum(int c);'
-    'int\t+ft_isalpha\(int c\);::int ft_isalpha(int c);'
-    'int\t+ft_isascii\(int c\);::int ft_isascii(int c);'
-    'int\t+ft_isdigit\(int c\);::int ft_isdigit(int c);'
-    'int\t+ft_isprint\(int c\);::int ft_isprint(int c);'
-    'char\t+\*ft_itoa\(int n\);::char *ft_itoa(int n);'
-    'void\t+\*ft_memchr\(const void \*s, int c, size_t n\);::void *ft_memchr(const void *s, int c, size_t n);'
-    'int\t+ft_memcmp\(const void \*s1, const void \*s2, size_t n\);::int ft_memcmp(const void *s1, const void *s2, size_t n);'
-    'void\t+\*ft_memcpy\(void \*dest, const void \*src, size_t n\);::void *ft_memcpy(void *dest, const void *src, size_t n);'
-    'void\t+\*ft_memmove\(void \*dest, const void \*src, size_t n\);::void *ft_memmove(void *dest, const void *src, size_t n);'
-    'void\t+\*ft_memset\(void \*s, int c, size_t n\);::void *ft_memset(void *s, int c, size_t n);'
-    'void\t+ft_putchar_fd\(char c, int fd\);::void ft_putchar_fd(char c, int fd);'
-    'void\t+ft_putendl_fd\(char \*s, int fd\);::void ft_putendl_fd(char *s, int fd);'
-    'void\t+ft_putnbr_fd\(int n, int fd\);::void ft_putnbr_fd(int n, int fd);'
-    'void\t+ft_putstr_fd\(char \*s, int fd\);::void ft_putstr_fd(char *s, int fd);'
-    'char\t+\*\*ft_split\(char const \*s, char c\);::char **ft_split(char const *s, char c);'
-    'char\t+\*ft_strchr\(const char \*s, int c\);::char *ft_strchr(const char *s, int c);'
-    'char\t+\*ft_strdup\(const char \*s\);::char *ft_strdup(const char *s);'
-    'void\t+ft_striteri\(char \*s, void \(\*f\)\(unsigned int, char\*\)\);::void ft_striteri(char *s, void (*f)(unsigned int, char*));'
-    'char\t+\*ft_strjoin\(char const \*s1, char const \*s2\);::char *ft_strjoin(char const *s1, char const *s2);'
-    'size_t\t+ft_strlcat\(char \*dst, const char \*src, size_t size\);::size_t ft_strlcat(char *dst, const char *src, size_t size);'
-    'size_t\t+ft_strlcpy\(char \*dst, const char \*src, size_t size\);::size_t ft_strlcpy(char *dst, const char *src, size_t size);'
-    'size_t\t+ft_strlen\(const char \*s\);::size_t ft_strlen(const char *s);'
-    'char\t+\*ft_strmapi\(char const \*s, char \(\*f\)\(unsigned int, char\)\);::char *ft_strmapi(char const *s, char (*f)(unsigned int, char));'
-    'int\t+ft_strncmp\(const char \*s1, const char \*s2, size_t n\);::int ft_strncmp(const char *s1, const char *s2, size_t n);'
-    'char\t+\*ft_strnstr\(const char \*big, const char \*little, size_t len\);::char *ft_strnstr(const char *big, const char *little, size_t len);'
-    'char\t+\*ft_strrchr\(const char \*s, int c\);::char *ft_strrchr(const char *s, int c);'
-    'char\t+\*ft_strtrim\(char const \*s1, char const \*set\);::char *ft_strtrim(char const *s1, char const *set);'
-    'char\t+\*ft_substr\(char const \*s, unsigned int start, size_t len\);::char *ft_substr(char const *s, unsigned int start, size_t len);'
-    'int\t+ft_tolower\(int c\);::int ft_tolower(int c);'
-    'int\t+ft_toupper\(int c\);::int ft_toupper(int c);'
-)
-for proto in "${mandatory_prototypes[@]}"; do
-    regex="${proto%%::*}"
-    display="${proto##*::}"
-    if ! grep -Pq "$regex" "$LIBFT_H"; then
-        ((errors++))
-        if [ $errors -eq 1 ]; then
-            error_messages+="Missing or malformed prototype(s), expected:"$'\n'
-        fi
-        error_messages+="$display"$'\n'
+PROTOTYPES='int ft_isalpha(int c);
+int ft_isdigit(int c);
+int ft_isalnum(int c);
+int ft_isascii(int c);
+int ft_isprint(int c);
+size_t ft_strlen(const char *s);
+void *ft_memset(void *s, int c, size_t n);
+void ft_bzero(void *s, size_t n);
+void *ft_memcpy(void *dest, const void *src, size_t n);
+void *ft_memmove(void *dest, const void *src, size_t n);
+size_t ft_strlcpy(char *dst, const char *src, size_t size);
+size_t ft_strlcat(char *dst, const char *src, size_t size);
+int ft_toupper(int c);
+int ft_tolower(int c);
+char *ft_strchr(const char *s, int c);
+char *ft_strrchr(const char *s, int c);
+int ft_strncmp(const char *s1, const char *s2, size_t n);
+void *ft_memchr(const void *s, int c, size_t n);
+int ft_memcmp(const void *s1, const void *s2, size_t n);
+char *ft_strnstr(const char *big, const char *little, size_t len);
+int ft_atoi(const char *nptr);
+void *ft_calloc(size_t nmemb, size_t size);
+char *ft_strdup(const char *s);
+char *ft_substr(char const *s, unsigned int start, size_t len);
+char *ft_strjoin(char const *s1, char const *s2);
+char *ft_strtrim(char const *s1, char const *set);
+char **ft_split(char const *s, char c);
+char *ft_itoa(int n);
+char *ft_strmapi(char const *s, char (*f)(unsigned int, char));
+void ft_striteri(char *s, void (*f)(unsigned int, char*));
+void ft_putchar_fd(char c, int fd);
+void ft_putstr_fd(char *s, int fd);
+void ft_putendl_fd(char *s, int fd);
+void ft_putnbr_fd(int n, int fd);
+t_list *ft_lstnew(void *content);
+void ft_lstadd_front(t_list **lst, t_list *new);
+unsigned int ft_lstsize(t_list *lst);
+t_list *ft_lstlast(t_list *lst);
+void ft_lstadd_back(t_list **lst, t_list *new);
+void ft_lstdelone(t_list *lst, void (*del)(void *));
+void ft_lstclear(t_list **lst, void (*del)(void *));
+void ft_lstiter(t_list *lst, void (*f)(void *));
+t_list *ft_lstmap(t_list *lst, void *(*f)(void *), void (*del)(void *));'
+PROTO_ISSUES=""
+grep -qw restrict "$LIBFT_DIR/libft.h" && PROTO_ISSUES+="The 'restrict' qualifier is forbidden"$'\n'
+# The compiler checks the types (parameter names and spacing don't matter):
+# a missing prototype is an undeclared identifier, a wrong one has conflicting types.
+{
+    echo '#include "libft.h"'
+    echo 'void libft_fairy_uses(void) {'
+    grep -oE 'ft_[a-z_]+\(' <<< "$PROTOTYPES" | sed 's/^/(void)/; s/($/;/'
+    echo '}'
+    echo "$PROTOTYPES"
+} > "$TMP_DIR/prototypes.c"
+if ! PROTO_LOG=$(gcc -fsyntax-only -I"$LIBFT_DIR" "$TMP_DIR/prototypes.c" 2>&1); then
+    PROTO_FUNCS=$(grep 'error:' <<< "$PROTO_LOG" | sed 's/.*error: //' | grep -oE 'ft_[a-z_]+' | sort -u)
+    if [ -z "$PROTO_FUNCS" ]; then
+        PROTO_ISSUES+="$PROTO_LOG"$'\n'
+    else
+        PROTO_ISSUES+="Missing or mismatching prototype(s), expected:"$'\n'
+        for func in $PROTO_FUNCS; do
+            PROTO_ISSUES+="$(grep -E "\b$func\(" <<< "$PROTOTYPES")"$'\n'
+        done
     fi
-done
-PROTO_TEST_RES=$errors
-if [ $BONUS_VERSION -eq 1 ]; then
-    errors=0
-    bonus_prototypes=(
-        'void\t+ft_lstadd_back\(t_list \*\*lst, t_list \*new\);::void ft_lstadd_back(t_list **lst, t_list *new);'
-        'void\t+ft_lstadd_front\(t_list \*\*lst, t_list \*new\);::void ft_lstadd_front(t_list **lst, t_list *new);'
-        'void\t+ft_lstclear\(t_list \*\*lst, void \(\*del\)\(void \*\)\);::void ft_lstclear(t_list **lst, void (*del)(void *));'
-        'void\t+ft_lstdelone\(t_list \*lst, void \(\*del\)\(void \*\)\);::void ft_lstdelone(t_list *lst, void (*del)(void *));'
-        'void\t+ft_lstiter\(t_list \*lst, void \(\*f\)\(void \*\)\);::void ft_lstiter(t_list *lst, void (*f)(void *));'
-        't_list\t+\*ft_lstlast\(t_list \*lst\);::t_list *ft_lstlast(t_list *lst);'
-        't_list\t+\*ft_lstmap\(t_list \*lst, void \*\(\*f\)\(void \*\), void \(\*del\)\(void \*\)\);::t_list *ft_lstmap(t_list *lst, void *(*f)(void *), void (*del)(void *));'
-        't_list\t+\*ft_lstnew\(void \*content\);::t_list *ft_lstnew(void *content);'
-        'int\t+ft_lstsize\(t_list \*lst\);::int ft_lstsize(t_list *lst);'
-    )
-    for proto in "${bonus_prototypes[@]}"; do
-        regex="${proto%%::*}"
-        display="${proto##*::}"
-        if ! grep -Pq "$regex" "$LIBFT_H"; then
-            ((errors++))
-            if [ $PROTO_TEST_RES -eq 0 ] && [ $errors -eq 1 ]; then
-                error_messages+="Missing or malformed prototype(s), expected:"$'\n'
-            fi
-            error_messages+="$display"$'\n'
-        fi
-    done
-    BONUS_PROTO_TEST_RES=$errors
 fi
-if [ $PROTO_TEST_RES -eq 0 ] && [ $BONUS_PROTO_TEST_RES -eq 0 ]; then
+if [ -z "$PROTO_ISSUES" ]; then
     ok
 else
+    PROTO_TEST_RES=1
     fail
-fi
-if [ -n "$error_messages" ]; then
     echo ""
-    echo -e "$error_messages"
+    printf '%s\n' "$PROTO_ISSUES"
 fi
 
 printf "🔧 Checking Makefile..."
-MAKEFILE_PATH="$LIBFT_DIR/Makefile"
 MAKE_ISSUES=""
-if [ ! -f "$MAKEFILE_PATH" ]; then
+BONUS_RULE=0
+grep -Eq '^bonus\s*:' "$MAKEFILE_PATH" && BONUS_RULE=1
+for rule in all clean fclean re; do
+    grep -Eq "^$rule\s*:" "$MAKEFILE_PATH" || MAKE_ISSUES+="Missing rule: $rule"$'\n'
+done
+grep -Eq '^\$(\(NAME\)|\{NAME\})\s*:' "$MAKEFILE_PATH" || MAKE_ISSUES+="Missing rule: \$(NAME)"$'\n'
+grep -v '^\s*#' "$MAKEFILE_PATH" | grep -q '\*\.c' && MAKE_ISSUES+="Forbidden wildcard inclusion detected (*.c)"$'\n'
+# compilation commands as make would run them, with every variable expanded
+COMPILE_CMDS=$(make -nB -C "$LIBFT_DIR" --no-print-directory 2>/dev/null | grep -E '(^|\s)-c(\s|$)')
+if [ -z "$COMPILE_CMDS" ]; then
+    MAKE_ISSUES+="No compilation command found with 'make -n'"$'\n'
+else
+    grep -vqE '(^|[;&|/[:space:]])cc\s' <<< "$COMPILE_CMDS" && MAKE_ISSUES+="Sources must be compiled with cc"$'\n'
+    for flag in -Wall -Wextra -Werror; do
+        grep -vq -- "$flag" <<< "$COMPILE_CMDS" && MAKE_ISSUES+="Missing compilation flag: $flag"$'\n'
+    done
+    grep -q -- '-std=c99' <<< "$COMPILE_CMDS" && MAKE_ISSUES+="Forbidden flag: -std=c99"$'\n'
+fi
+# nanosecond timestamps: a relink happens in the same second as the previous build
+for target in "" $([ $BONUS_RULE -eq 1 ] && echo bonus); do
+    make -C "$LIBFT_DIR" $target > /dev/null 2>&1
+    before=$(stat -c %y "$LIBFT_A" 2>/dev/null)
+    make -C "$LIBFT_DIR" $target > /dev/null 2>&1
+    [ "$(stat -c %y "$LIBFT_A" 2>/dev/null)" != "$before" ] \
+        && MAKE_ISSUES+="Unnecessary relink detected when running 'make${target:+ $target}' twice"$'\n'
+done
+[ -f "$LIBFT_A" ] || MAKE_ISSUES+="make does not create libft.a at the root of the repository"$'\n'
+if [ -z "$MAKE_ISSUES" ]; then
+    ok
+else
     MAKE_ERRORS=1
     fail
     echo ""
-    echo "No Makefile found!"
-    exit 1
-fi
-if ! grep -Eq '(^|\s)cc(\s|$)' "$MAKEFILE_PATH"; then
-    ((MAKE_ERRORS++))
-    MAKE_ISSUES+="Missing or incorrect compiler (should use 'cc')"$'\n'
-fi
-for flag in -Wall -Wextra -Werror; do
-    if ! grep -Fq -- "$flag" "$MAKEFILE_PATH"; then
-        ((MAKE_ERRORS++))
-        MAKE_ISSUES+="Missing compilation flag: $flag"$'\n'
-    fi
-done
-for rule in all clean fclean re; do
-    if ! grep -Eq "^$rule\s*:" "$MAKEFILE_PATH"; then
-        ((MAKE_ERRORS++))
-        MAKE_ISSUES+="Missing rule: $rule"$'\n'
-    fi
-done
-if ! grep -Eq '^\$\(NAME\)\s*:' "$MAKEFILE_PATH"; then
-    ((MAKE_ERRORS++))
-    MAKE_ISSUES+="Missing rule: \$(NAME)"$'\n'
-fi
-make -C "$LIBFT_DIR" > /dev/null 2>&1 || true
-lib_file=$(grep -E '^\$\(NAME\)\s*:' "$MAKEFILE_PATH" | awk '{print $1}' | tr -d ':')
-[ -z "$lib_file" ] && lib_file="libft.a"
-lib_file="$LIBFT_DIR/$lib_file"
-timestamp_before=$(stat -c %Y "$lib_file" 2>/dev/null || echo 0)
-make -C "$LIBFT_DIR" > /dev/null 2>&1 || true
-timestamp_after=$(stat -c %Y "$lib_file" 2>/dev/null || echo 0)
-if [ "$timestamp_after" -ne "$timestamp_before" ]; then
-    ((MAKE_ERRORS++))
-    MAKE_ISSUES+="Unnecessary relink detected when running make twice"$'\n'
-fi
-if [ $BONUS_VERSION -eq 1 ]; then
-    if ! grep -Eq '_bonus\.c' "$MAKEFILE_PATH"; then
-        ((MAKE_ERRORS++))
-        MAKE_ISSUES+="Missing *_bonus.c file(s) in bonus version"$'\n'
-    fi
-fi
-if grep -Eq '\*\.c' "$MAKEFILE_PATH" || grep -Eq '\*\.o' "$MAKEFILE_PATH"; then
-    ((MAKE_ERRORS++))
-    MAKE_ISSUES+="Forbidden wildcard inclusion detected (*.c or *.o)"$'\n'
-fi
-if [ $MAKE_ERRORS -eq 0 ]; then
-    ok
-else
-    fail
-    echo ""
-    echo -e "$MAKE_ISSUES"
+    printf '%s\n' "$MAKE_ISSUES"
 fi
 
 printf "📦 Building libft..."
 MAKE_CMD="make -C $LIBFT_DIR"
-[ $BONUS_VERSION -eq 1 ] && MAKE_CMD="$MAKE_CMD bonus"
-MAKE_OUTPUT=$($MAKE_CMD 2>&1)
-if [ $? -eq 0 ]; then
+[ $BONUS_RULE -eq 1 ] && MAKE_CMD="$MAKE_CMD bonus"
+if MAKE_OUTPUT=$($MAKE_CMD 2>&1); then
     ok
 else
     BUILD_FAIL=1
     fail
     echo ""
-    echo -e "$MAKE_OUTPUT"
-    echo ""
+    printf '%s\n\n' "$MAKE_OUTPUT"
     exit 1
 fi
 
-printf "🔍 Checking externals..."
-EXTERN_OUTPUT=""
-no_extern="ft_striteri ft_isdigit ft_isalnum ft_isascii ft_isprint ft_strlen ft_memset ft_bzero ft_memcpy ft_memmove ft_strlcpy ft_strlcat ft_toupper ft_tolower ft_strchr ft_strrchr ft_strncmp ft_memchr ft_memcmp ft_strnstr ft_atoi"
-malloc_funcs="ft_strmapi ft_itoa ft_calloc ft_strdup ft_substr ft_strjoin ft_strtrim"
-write_funcs="ft_putchar_fd ft_putstr_fd ft_putendl_fd ft_putnbr_fd"
-result=$(check_externals_batch "$no_extern" "")
-[ $? -ne 0 ] && EXTERN_TEST_RES=1 && EXTERN_OUTPUT="$EXTERN_OUTPUT$result"
-result=$(check_externals_batch "$malloc_funcs" "malloc")
-[ $? -ne 0 ] && EXTERN_TEST_RES=1 && EXTERN_OUTPUT="$EXTERN_OUTPUT$result"
-result=$(check_external_functions "ft_split" "malloc free" 2>&1)
-[ $? -ne 0 ] && EXTERN_TEST_RES=1 && EXTERN_OUTPUT="${EXTERN_OUTPUT}${result}\n"
-result=$(check_externals_batch "$write_funcs" "write")
-[ $? -ne 0 ] && EXTERN_TEST_RES=1 && EXTERN_OUTPUT="$EXTERN_OUTPUT$result"
-if [ $BONUS_VERSION -eq 1 ]; then
-    bonus_no_extern="ft_lstiter ft_lstadd_front ft_lstsize ft_lstlast ft_lstadd_back"
-    result=$(check_externals_batch "$bonus_no_extern" "")
-    [ $? -ne 0 ] && EXTERN_TEST_RES=1 && EXTERN_OUTPUT="$EXTERN_OUTPUT$result"
-    for func_pair in "ft_lstnew:malloc" "ft_lstdelone:free" "ft_lstclear:free" "ft_lstmap:malloc free"; do
-        IFS=':' read -r func allowed <<< "$func_pair"
-        result=$(check_external_functions "$func" "$allowed" 2>&1)
-        [ $? -ne 0 ] && EXTERN_TEST_RES=1 && EXTERN_OUTPUT="${EXTERN_OUTPUT}${result}\n"
-    done
-fi
-if [ $EXTERN_TEST_RES -eq 0 ]; then
+printf "🔍 Checking symbols..."
+# external functions each libft function may call, all others are forbidden
+ALLOWED="ft_calloc:malloc ft_strdup:malloc ft_substr:malloc ft_strjoin:malloc ft_strtrim:malloc
+ft_split:malloc,free ft_itoa:malloc ft_strmapi:malloc ft_putchar_fd:write ft_putstr_fd:write
+ft_putendl_fd:write ft_putnbr_fd:write ft_lstnew:malloc ft_lstdelone:free ft_lstclear:free ft_lstmap:malloc,free"
+# One pass over every object of the archive, wherever the .o files were built
+# and whatever functions each of them holds
+SYMBOLS_OUTPUT=$(nm -A "$LIBFT_A" 2>/dev/null | awk -v allowed="$ALLOWED" '
+    BEGIN { n = split(allowed, pairs); for (i = 1; i <= n; i++) { split(pairs[i], kv, ":"); ok[kv[1]] = kv[2] } }
+    { split($1, path, ":"); obj = path[2]; type = $(NF - 1); sym = $NF }
+    type == "T" && sym ~ /^ft_/ { allowed_in[obj] = allowed_in[obj] "," ok[sym]; next }
+    type == "T" { print obj ": non-static function: " sym }
+    type ~ /^[BCDGR]$/ { print obj ": global variable: " sym }
+    type == "U" && sym !~ /^(ft_|__stack_chk_|_GLOBAL_OFFSET_TABLE_$)/ { calls[obj] = calls[obj] " " sym }
+    END {
+        for (obj in calls) {
+            n = split(calls[obj], c)
+            for (i = 1; i <= n; i++)
+                if (index(allowed_in[obj] ",", "," c[i] ",") == 0)
+                    print obj ": forbidden function: " c[i] (c[i] ~ /^__ctype/ ? " (<ctype.h> macro)" : "")
+        }
+    }')
+DEFINED=$(nm -g --defined-only "$LIBFT_A" 2>/dev/null | awk '{ print $NF }')
+for func in $(grep -oE 'ft_[a-z_]+' <<< "$PROTOTYPES"); do
+    grep -qx "$func" <<< "$DEFINED" || SYMBOLS_OUTPUT+="${SYMBOLS_OUTPUT:+$'\n'}libft.a: missing function: $func"
+done
+if [ -z "$SYMBOLS_OUTPUT" ]; then
     ok
 else
+    EXTERN_TEST_RES=1
     fail
     echo ""
-    echo -e "$EXTERN_OUTPUT"
+    printf '%s\n\n' "$SYMBOLS_OUTPUT"
 fi
 
 printf "🔨 Building tests..."
 VERBOSE_FLAG=""
 [ $VERBOSE -eq 1 ] && VERBOSE_FLAG="-DVERBOSE=1"
-COMPILE_FLAGS="-Wall -Wextra -Werror -no-pie $VERBOSE_FLAG -Wl,--wrap=malloc"
+COMPILE_FLAGS="-Wall -Wextra -Werror -Wno-missing-field-initializers -no-pie $VERBOSE_FLAG -Wl,--wrap=malloc"
 BUILD_ERRORS=""
 compile_test() {
     local src_file=$1
     local output_file=$2
-    local label=$3
     local compile_output
+    rm -f "$output_file"
     if ! compile_output=$(gcc $COMPILE_FLAGS "$src_file" utils.c -L$LIBFT_DIR -lft -I$LIBFT_DIR -o "$output_file" 2>&1); then
-        BUILD_ERRORS+="$label compilation failed:\n$compile_output"$'\n'
+        BUILD_ERRORS+="$src_file compilation failed:"$'\n'"$(head -n 15 <<< "$compile_output")"$'\n'
         return 1
     fi
     return 0
 }
-compile_test basic_tests.c "$BASIC_TESTER_NAME" "basic_tests" || BUILD_FAIL=1
-compile_test leak_tests.c "$LEAK_TESTER_NAME" "leak_tests" || BUILD_FAIL=1
-if [ $BONUS_VERSION -eq 1 ]; then
-    compile_test basic_tests_bonus.c "$BONUS_BASIC_TESTER_NAME" "bonus basic_tests" || BUILD_FAIL=1
-    compile_test leak_tests_bonus.c "$BONUS_LEAK_TESTER_NAME" "bonus leak_tests" || BUILD_FAIL=1
-fi
+# a test file that does not compile is reported and skipped, the others still run
+compile_test basic_tests.c "$BASIC_TESTER_NAME" || BUILD_FAIL=1
+compile_test leak_tests.c "$LEAK_TESTER_NAME" || BUILD_FAIL=1
+compile_test basic_tests_bonus.c "$BONUS_BASIC_TESTER_NAME" || BUILD_FAIL=1
+compile_test leak_tests_bonus.c "$BONUS_LEAK_TESTER_NAME" || BUILD_FAIL=1
 if [ $BUILD_FAIL -eq 0 ]; then
     ok
 else
     fail
     echo ""
-    echo -e "$BUILD_ERRORS"
-    exit 1
+    printf '%s\n' "$BUILD_ERRORS"
 fi
 
 printf "🧪 Running tests..."
 : > .results
-run_plain "$BASIC_TESTER_NAME"
+run_tester "$BASIC_TESTER_NAME"
 BASIC_TESTS_RES=$?
-if [ $BONUS_VERSION -eq 1 ]; then
-    run_plain "$BONUS_BASIC_TESTER_NAME"
-    BONUS_BASIC_TESTS_RES=$?
-fi
-run_leak "$LEAK_TESTER_NAME" "$TMP_DIR/valgrind_output.log"
+run_tester "$BONUS_BASIC_TESTER_NAME"
+BONUS_BASIC_TESTS_RES=$?
+run_tester "$LEAK_TESTER_NAME" "$TMP_DIR/valgrind_output.log"
 LEAK_TESTS_RES=$?
-if [ $BONUS_VERSION -eq 1 ]; then
-    run_leak "$BONUS_LEAK_TESTER_NAME" "$TMP_DIR/bonus_valgrind_output.log"
-    BONUS_LEAK_TESTS_RES=$?
-fi
-if [ $LEAK_TESTS_RES -ne 0 ] || [ $VERBOSE -eq 1 ]; then
-    {
-        echo ""
-        echo "════════════════════════════════════════"
-        echo "VALGRIND OUTPUT (mandatory)"
-        echo "════════════════════════════════════════"
-        cat "$TMP_DIR/valgrind_output.log"
-    } >> .results
-fi
-if [ $BONUS_LEAK_TESTS_RES -ne 0 ] || ( [ $VERBOSE -eq 1 ] && [ $BONUS_VERSION -eq 1 ] ); then
-    {
-        echo ""
-        echo "════════════════════════════════════════"
-        echo "VALGRIND OUTPUT (bonus)"
-        echo "════════════════════════════════════════"
-        cat "$TMP_DIR/bonus_valgrind_output.log"
-    } >> .results
-fi
+run_tester "$BONUS_LEAK_TESTER_NAME" "$TMP_DIR/lists_valgrind_output.log"
+BONUS_LEAK_TESTS_RES=$?
+show_valgrind_log "Part 1 & 2" "$TMP_DIR/valgrind_output.log" $LEAK_TESTS_RES
+show_valgrind_log "Part 3, linked lists" "$TMP_DIR/lists_valgrind_output.log" $BONUS_LEAK_TESTS_RES
 if [ $BASIC_TESTS_RES -eq 124 ] || [ $BONUS_BASIC_TESTS_RES -eq 124 ] \
     || [ $LEAK_TESTS_RES -eq 124 ] || [ $BONUS_LEAK_TESTS_RES -eq 124 ]; then
     timeout_
-elif tests_passed; then
+elif tests_ran_ok; then
     ok
 else
     fail

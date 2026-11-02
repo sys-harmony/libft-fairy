@@ -49,10 +49,6 @@ static void	ft_lstmap_basic_test(void) {
 	}
 }
 
-static void	*map_func_shared_content(void *content) {
-	return content;
-}
-
 static void	ft_lstmap_shared_content_test(void)
 {
 	t_list	*lst = create_test_list(1, 2, 3, 0);

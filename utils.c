@@ -1,18 +1,34 @@
 #include "libft_fairy.h"
 
 int	g_malloc_wrap_enabled = 0;
-int	g_malloc_zero;
 int	g_malloc_count;
 int	g_malloc_fail_at;
 int	g_tests_failed = 0;
 
+// Most recent allocations, so tests can check the size of a returned buffer
+static struct {
+	void	*ptr;
+	size_t	size;
+}				g_allocs[128];
+static size_t	g_allocs_count;
+
 void	*__wrap_malloc(size_t size) {
 	if (g_malloc_wrap_enabled && ++g_malloc_count == g_malloc_fail_at)
 		return NULL;
-	g_malloc_zero = 0;
-	if (!size)
-		g_malloc_zero = 1;
-	return __real_malloc(size);
+	void	*ptr = __real_malloc(size);
+	size_t	i = g_allocs_count++ % ARRAY_SIZE(g_allocs);
+
+	g_allocs[i].ptr = ptr;
+	g_allocs[i].size = size;
+	return ptr;
+}
+
+// Size requested by the latest malloc that returned ptr, 0 if ptr was not malloc'd
+size_t	alloc_size(void *ptr) {
+	for (size_t i = 1; i <= ARRAY_SIZE(g_allocs) && i <= g_allocs_count; i++)
+		if (g_allocs[(g_allocs_count - i) % ARRAY_SIZE(g_allocs)].ptr == ptr)
+			return g_allocs[(g_allocs_count - i) % ARRAY_SIZE(g_allocs)].size;
+	return 0;
 }
 
 int	all_tests_passed(const int *passed, const size_t num_tests) {
@@ -36,6 +52,10 @@ void	*map_func_dynamic_content(void *content) {
 		return NULL;
 	*new = *(int *)content * 2;
 	return new;
+}
+
+void	*map_func_shared_content(void *content) {
+	return content;
 }
 
 void	safe_free_arr(char ***arr) {
@@ -76,46 +96,33 @@ void	*xmalloc(size_t size) {
 	return NULL;
 }
 
-t_list	*create_test_list(int c1, int c2, int c3, int use_static) {
-	int *v1, *v2, *v3;
+#include <string.h>
 
-	if (use_static)
-	{
-		static int s1, s2, s3;
-		s1 = c1; s2 = c2; s3 = c3;
-		v1 = &s1; v2 = &s2; v3 = &s3;
-	}
-	else
-	{
-		v1 = malloc(sizeof(int));
-		v2 = malloc(sizeof(int));
-		v3 = malloc(sizeof(int));
-		if (!v1 || !v2 || !v3)
-		{
-			free(v1); free(v2); free(v3);
-			error_exit("libft-fairy: malloc failed");
-		}
-		*v1 = c1; *v2 = c2; *v3 = c3;
-	}
-	t_list *n1 = malloc(sizeof(t_list));
-	t_list *n2 = malloc(sizeof(t_list));
-	t_list *n3 = malloc(sizeof(t_list));
-	if (!n1 || !n2 || !n3)
-	{
-		if (n1) free(n1); else if (!use_static) free(v1);
-		if (n2) free(n2); else if (!use_static) free(v2);
-		if (n3) free(n3); else if (!use_static) free(v3);
-		error_exit("libft-fairy: malloc failed");
-	}
-	n1->content = v1;
-	n2->content = v2;
-	n3->content = v3;
-	n1->next = n2;
-	n2->next = n3;
-	n3->next = NULL;
-	return n1;
+// Aborts unless s is a malloc'd copy of expected, big enough for its '\0', then frees s
+void	check_str(char *s, const char *expected) {
+	if (!s || strcmp(s, expected) || alloc_size(s) < strlen(expected) + 1)
+		abort();
+	free(s);
 }
 
+// Builds the list c1 -> c2 -> c3, with malloc'd contents (or static ones if use_static)
+t_list	*create_test_list(int c1, int c2, int c3, int use_static) {
+	static int	statics[3];
+	const int	values[3] = {c1, c2, c3};
+	t_list		*head = NULL;
+
+	for (int i = 2; i >= 0; i--) {
+		t_list	*node = xmalloc(sizeof(t_list));
+
+		node->content = use_static ? &statics[i] : xmalloc(sizeof(int));
+		*(int *)node->content = values[i];
+		node->next = head;
+		head = node;
+	}
+	return head;
+}
+
+#include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
 
@@ -127,7 +134,8 @@ static pid_t	xwaitpid(pid_t pid, int *status, int options)
 	return ret;
 }
 
-int	forked_test(void (*test_func)(void)) {
+// Runs test_func in a child process, returns 0 if it returned normally, else the signal that killed it
+static int	forked_test(void (*test_func)(void)) {
 	pid_t	pid;
 	int		status;
 
@@ -136,11 +144,45 @@ int	forked_test(void (*test_func)(void)) {
 	if (pid == -1)
 		error_exit("libft-fairy: fork failed");
 	if (!pid) {
+		alarm(TEST_TIMEOUT);
 		test_func();
 		exit(EXIT_SUCCESS);
 	}
 	xwaitpid(pid, &status, 0);
 	if (WIFSIGNALED(status))
-		return 1;
+		return WTERMSIG(status);
 	return 0;
+}
+
+static const char	*failure_reason(int sig) {
+	if (!sig)
+		return "did not crash";
+	if (sig == SIGALRM)
+		return "timeout";
+	if (sig == SIGABRT)
+		return "wrong result";
+	return strsignal(sig);
+}
+
+// Forks every test (the malloc wrapper state is set before forking, so each child inherits it)
+// and prints the results if a test failed or in verbose mode
+void	run_tests(char *function_name, const t_test *tests, const size_t num_tests) {
+	const char	*names[num_tests];
+	char		labels[num_tests][128];
+	int			passed[num_tests];
+
+	for (size_t i = 0; i < num_tests; i++) {
+		g_malloc_count = 0;
+		g_malloc_fail_at = tests[i].fail_at;
+		int sig = forked_test(tests[i].func);
+		passed[i] = tests[i].crash ? sig && sig != SIGALRM : !sig;
+		names[i] = tests[i].name;
+		if (!passed[i]) {
+			snprintf(labels[i], sizeof(labels[i]), "%s  (%s)", tests[i].name, failure_reason(sig));
+			names[i] = labels[i];
+		}
+	}
+	g_malloc_fail_at = 0;
+	if (!all_tests_passed(passed, num_tests) || VERBOSE)
+		print_test_results(function_name, num_tests, names, passed);
 }

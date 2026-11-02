@@ -1,165 +1,30 @@
 #include "libft_fairy.h"
 
-#ifndef VERBOSE
-# define VERBOSE 0
-#endif
-
 /* ************************************************************************** */
-/*                            ft_isalpha tests                                */
+/*                  ft_is* / ft_toupper / ft_tolower tests                    */
 /* ************************************************************************** */
 
-static void	test_ft_isalpha(void) {
-	const char		*tests[] = {
-		"EOF to '?'",
-		"'A' to 'Z'",
-		"'[' to '`'",
-		"'a' to 'z'",
-		"'{' to 255"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	int				passed[] = {1, 1, 1, 1, 1};
-	int				c = -1;
+#include <ctype.h>
+#include <stdio.h>
 
-	while (passed[0] && c < 'A')
-		if (ft_isalpha(c++))
+// Compares ft with the libc function ref for every value from EOF to 255.
+// A character class function must return exactly 1 on a match (subject rule).
+static void	test_char_func(char *function_name, int (*ft)(int), int (*ref)(int), int is_class) {
+	char		label[64] = "EOF to 255";
+	const char	*tests[] = {label};
+	int			passed[] = {1};
+
+	for (int c = -1; c < 256 && passed[0]; c++) {
+		int	expected = is_class ? !!ref(c) : ref(c);
+		int	got = ft(c);
+
+		if (got != expected) {
+			snprintf(label, sizeof(label), "EOF to 255  (c = %d: got %d, expected %d)", c, got, expected);
 			passed[0] = 0;
-	while (passed[1] && c <= 'Z')
-		if (!ft_isalpha(c++))
-			passed[1] = 0;
-	while (passed[2] && c < 'a')
-		if (ft_isalpha(c++))
-			passed[2] = 0;
-	while (passed[3] && c <= 'z')
-		if (!ft_isalpha(c++))
-			passed[3] = 0;
-	while (passed[4] && c < 256)
-		if (ft_isalpha(c++))
-			passed[4] = 0;
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_isalpha", num_tests, tests, passed);
-}
-
-/* ************************************************************************** */
-/*                            ft_isdigit tests                                */
-/* ************************************************************************** */
-
-static void	test_ft_isdigit(void) {
-	const char		*tests[] = {
-		"EOF to '/'",
-		"'0' to '9'",
-		"':' to 255"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	int				passed[] = {1, 1, 1};
-	int				c = -1;
-
-	while (passed[0] && c < '0')
-		if (ft_isdigit(c++))
-			passed[0] = 0;
-	while (passed[1] && c <= '9')
-		if (!ft_isdigit(c++))
-			passed[1] = 0;
-	while (passed[2] && c < 256)
-		if (ft_isdigit(c++))
-			passed[2] = 0;
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_isdigit", num_tests, tests, passed);
-}
-
-/* ************************************************************************** */
-/*                            ft_isalnum tests                                */
-/* ************************************************************************** */
-
-static void	test_ft_isalnum(void) {
-	const char		*tests[] = {
-		"EOF to '/'",
-		"'0' to '9'",
-		"':' to '?'",
-		"'A' to 'Z'",
-		"'[' to '`'",
-		"'a' to 'z'",
-		"'{' to 255"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	int				passed[] = {1, 1, 1, 1, 1, 1, 1};
-	int				c = -1;
-
-	while (passed[0] && c < '0')
-		if (ft_isalnum(c++))
-			passed[0] = 0;
-	while (passed[1] && c <= '9')
-		if (!ft_isalnum(c++))
-			passed[1] = 0;
-	while (passed[2] && c < 'A')
-		if (ft_isalnum(c++))
-			passed[2] = 0;
-	while (passed[3] && c <= 'Z')
-		if (!ft_isalnum(c++))
-			passed[3] = 0;
-	while (passed[4] && c < 'a')
-		if (ft_isalnum(c++))
-			passed[4] = 0;
-	while (passed[5] && c <= 'z')
-		if (!ft_isalnum(c++))
-			passed[5] = 0;
-	while (passed[6] && c < 256)
-		if (ft_isalnum(c++))
-			passed[6] = 0;
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_isalnum", num_tests, tests, passed);
-}
-
-/* ************************************************************************** */
-/*                            ft_isascii tests                                */
-/* ************************************************************************** */
-
-static void	test_ft_isascii(void) {
-	const char		*tests[] = {
-		"EOF",
-		"'\\0' to DEL",
-		"128 to 255"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	int				passed[] = {1, 1, 1};
-	int				c = 0;
-
-	if (ft_isascii(-1))
-		passed[0] = 0;
-	while (passed[1] && c < 128)
-		if (!ft_isascii(c++))
-			passed[1] = 0;
-	while (passed[2] && c < 256)
-		if (ft_isascii(c++))
-			passed[2] = 0;
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_isascii", num_tests, tests, passed);
-}
-
-/* ************************************************************************** */
-/*                            ft_isprint tests                                */
-/* ************************************************************************** */
-
-static void	test_ft_isprint(void) {
-	const char		*tests[] = {
-		"EOF to US",
-		"' ' to '~'",
-		"DEL to 255"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	int				passed[] = {1, 1, 1};
-	int				c = -1;
-
-	while (passed[0] && c < ' ')
-		if (ft_isprint(c++))
-			passed[0] = 0;
-	while (passed[1] && c <= '~')
-		if (!ft_isprint(c++))
-			passed[1] = 0;
-	while (passed[2] && c < 256)
-		if (ft_isprint(c++))
-			passed[2] = 0;
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_isprint", num_tests, tests, passed);
+		}
+	}
+	if (!passed[0] || VERBOSE)
+		print_test_results(function_name, 1, tests, passed);
 }
 
 /* ************************************************************************** */
@@ -183,20 +48,13 @@ static void	ft_strlen_null_test(void) {
 }
 
 static void	test_ft_strlen(void) {
-	const char		*tests[] = {
-		"empty string",
-		"'hello'",
-		"NULL (should crash)"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strlen_empty_test),
-		!forked_test(ft_strlen_hello_test),
-		forked_test(ft_strlen_null_test)
+	const t_test	tests[] = {
+		{"empty string", ft_strlen_empty_test},
+		{"'hello'", ft_strlen_hello_test},
+		{"NULL (should crash)", ft_strlen_null_test, .crash = 1}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strlen", num_tests, tests, passed);
+	run_tests("ft_strlen", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -239,22 +97,14 @@ static void	ft_memset_null_test(void) {
 }
 
 static void	test_ft_memset(void) {
-	const char		*tests[] = {
-		"basic memset",
-		"with 0",
-		"unsigned char (200)",
-		"NULL (should crash)"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_memset_basic_test),
-		!forked_test(ft_memset_zero_test),
-		!forked_test(ft_memset_uchar_test),
-		forked_test(ft_memset_null_test)
+	const t_test	tests[] = {
+		{"basic memset", ft_memset_basic_test},
+		{"with 0", ft_memset_zero_test},
+		{"unsigned char (200)", ft_memset_uchar_test},
+		{"NULL (should crash)", ft_memset_null_test, .crash = 1}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_memset", num_tests, tests, passed);
+	run_tests("ft_memset", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -283,18 +133,12 @@ static void	ft_bzero_all_test(void) {
 }
 
 static void	test_ft_bzero(void) {
-	const char		*tests[] = {
-		"bzero 5 bytes",
-		"bzero all"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_bzero_5_bytes_test),
-		!forked_test(ft_bzero_all_test)
+	const t_test	tests[] = {
+		{"bzero 5 bytes", ft_bzero_5_bytes_test},
+		{"bzero all", ft_bzero_all_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_bzero", num_tests, tests, passed);
+	run_tests("ft_bzero", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -334,24 +178,15 @@ static void	ft_memcpy_null_test(void) {
 }
 
 static void	test_ft_memcpy(void) {
-	const char		*tests[] = {
-		"basic memcpy",
-		"partial copy",
-		"return value",
-		"NULL src, n = 0 (no crash)",
-		"NULL (should crash)"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_memcpy_basic_test),
-		!forked_test(ft_memcpy_partial_test),
-		!forked_test(ft_memcpy_return_test),
-		!forked_test(ft_memcpy_null_n_zero_test),
-		forked_test(ft_memcpy_null_test)
+	const t_test	tests[] = {
+		{"basic memcpy", ft_memcpy_basic_test},
+		{"partial copy", ft_memcpy_partial_test},
+		{"return value", ft_memcpy_return_test},
+		{"NULL dst and src, n = 0 (no crash)", ft_memcpy_null_n_zero_test},
+		{"NULL (should crash)", ft_memcpy_null_test, .crash = 1}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_memcpy", num_tests, tests, passed);
+	run_tests("ft_memcpy", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -428,32 +263,19 @@ static void	ft_memmove_null_test(void) {
 }
 
 static void	test_ft_memmove(void) {
-	const char		*tests[] = {
-		"overlapping forward",
-		"overlapping backward",
-		"no overlap",
-		"dst == src",
-		"n = 0",
-		"minimal overlap",
-		"return value",
-		"NULL src, n = 0 (no crash)",
-		"NULL (should crash)"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_memmove_forward_test),
-		!forked_test(ft_memmove_backward_test),
-		!forked_test(ft_memmove_no_overlap_test),
-		!forked_test(ft_memmove_same_ptr_test),
-		!forked_test(ft_memmove_n_zero_test),
-		!forked_test(ft_memmove_minimal_overlap_test),
-		!forked_test(ft_memmove_return_test),
-		!forked_test(ft_memmove_null_n_zero_test),
-		forked_test(ft_memmove_null_test)
+	const t_test	tests[] = {
+		{"overlapping forward", ft_memmove_forward_test},
+		{"overlapping backward", ft_memmove_backward_test},
+		{"no overlap", ft_memmove_no_overlap_test},
+		{"dst == src", ft_memmove_same_ptr_test},
+		{"n = 0", ft_memmove_n_zero_test},
+		{"minimal overlap", ft_memmove_minimal_overlap_test},
+		{"return value", ft_memmove_return_test},
+		{"NULL dst and src, n = 0 (no crash)", ft_memmove_null_n_zero_test},
+		{"NULL (should crash)", ft_memmove_null_test, .crash = 1}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_memmove", num_tests, tests, passed);
+	run_tests("ft_memmove", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -462,7 +284,7 @@ static void	test_ft_memmove(void) {
 
 static void	ft_strlcpy_basic_test(void) {
 	char dst[10];
-	size_t len = ft_strlcpy(dst, "Hello", 20);
+	size_t len = ft_strlcpy(dst, "Hello", sizeof(dst));
 	if (strcmp(dst, "Hello") || len != 5)
 		abort();
 }
@@ -477,25 +299,18 @@ static void	ft_strlcpy_truncation_test(void) {
 static void	ft_strlcpy_size_zero_test(void) {
 	char dst[10] = "test";
 	size_t len = ft_strlcpy(dst, "42", 0);
-	if (len != 2)
+	if (len != 2 || strcmp(dst, "test"))
 		abort();
 }
 
 static void	test_ft_strlcpy(void) {
-	const char		*tests[] = {
-		"basic copy",
-		"truncation",
-		"size 0"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strlcpy_basic_test),
-		!forked_test(ft_strlcpy_truncation_test),
-		!forked_test(ft_strlcpy_size_zero_test)
+	const t_test	tests[] = {
+		{"basic copy", ft_strlcpy_basic_test},
+		{"truncation", ft_strlcpy_truncation_test},
+		{"size 0 (dst untouched)", ft_strlcpy_size_zero_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strlcpy", num_tests, tests, passed);
+	run_tests("ft_strlcpy", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -567,84 +382,18 @@ static void	ft_strlcat_no_room_test(void) {
 }
 
 static void	test_ft_strlcat(void) {
-	const char		*tests[] = {
-		"basic concat",
-		"truncation",
-		"dstsize = strlen(dst)",
-		"dstsize < strlen(dst)",
-		"dstsize = 0",
-		"empty src",
-		"empty dst",
-		"no room for concat"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strlcat_basic_test),
-		!forked_test(ft_strlcat_truncation_test),
-		!forked_test(ft_strlcat_dstsize_eq_dstlen_test),
-		!forked_test(ft_strlcat_dstsize_lt_dstlen_test),
-		!forked_test(ft_strlcat_dstsize_zero_test),
-		!forked_test(ft_strlcat_empty_src_test),
-		!forked_test(ft_strlcat_empty_dst_test),
-		!forked_test(ft_strlcat_no_room_test)
+	const t_test	tests[] = {
+		{"basic concat", ft_strlcat_basic_test},
+		{"truncation", ft_strlcat_truncation_test},
+		{"dstsize = strlen(dst)", ft_strlcat_dstsize_eq_dstlen_test},
+		{"dstsize < strlen(dst)", ft_strlcat_dstsize_lt_dstlen_test},
+		{"dstsize = 0", ft_strlcat_dstsize_zero_test},
+		{"empty src", ft_strlcat_empty_src_test},
+		{"empty dst", ft_strlcat_empty_dst_test},
+		{"no room for concat", ft_strlcat_no_room_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strlcat", num_tests, tests, passed);
-}
-
-/* ************************************************************************** */
-/*                            ft_toupper tests                                */
-/* ************************************************************************** */
-
-static void	test_ft_toupper(void) {
-	const char		*tests[] = {
-		"EOF to '`'",
-		"'a' to 'z'",
-		"'{' to 255"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	int				passed[] = {1, 1, 1};
-	int				c = -2;
-
-	while (passed[0] && ++c < 'a')
-		if (ft_toupper(c) != c)
-			passed[0] = 0;
-	while (passed[1] && ++c <= 'z')
-		if (ft_toupper(c) != c - 32)
-			passed[1] = 0;
-	while (passed[2] && ++c < 256)
-		if (ft_toupper(c) != c)
-			passed[2] = 0;
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_toupper", num_tests, tests, passed);
-}
-
-/* ************************************************************************** */
-/*                            ft_tolower tests                                */
-/* ************************************************************************** */
-
-static void	test_ft_tolower(void) {
-	const char		*tests[] = {
-		"EOF to '@'",
-		"'A' to 'Z'",
-		"'[' to 255"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	int				passed[] = {1, 1, 1};
-	int				c = -2;
-
-	while (passed[0] && ++c < 'A')
-		if (ft_tolower(c) != c)
-			passed[0] = 0;
-	while (passed[1] && ++c <= 'Z')
-		if (ft_tolower(c) != c + 32)
-			passed[1] = 0;
-	while (passed[2] && ++c < 256)
-		if (ft_tolower(c) != c)
-			passed[2] = 0;
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_tolower", num_tests, tests, passed);
+	run_tests("ft_strlcat", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -704,32 +453,19 @@ static void	ft_strchr_null_test(void) {
 }
 
 static void	test_ft_strchr(void) {
-	const char		*tests[] = {
-		"find 'o'",
-		"find 'W'",
-		"find '\\0'",
-		"find first char",
-		"find last char",
-		"not found 'x'",
-		"find unsigned char (200)",
-		"find c > 255 (wraps to char)",
-		"NULL (should crash)"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strchr_find_o_test),
-		!forked_test(ft_strchr_find_W_test),
-		!forked_test(ft_strchr_find_null_test),
-		!forked_test(ft_strchr_find_first_char_test),
-		!forked_test(ft_strchr_find_last_char_test),
-		!forked_test(ft_strchr_not_found_test),
-		!forked_test(ft_strchr_uchar_test),
-		!forked_test(ft_strchr_over_255_test),
-		forked_test(ft_strchr_null_test)
+	const t_test	tests[] = {
+		{"find 'o'", ft_strchr_find_o_test},
+		{"find 'W'", ft_strchr_find_W_test},
+		{"find '\\0'", ft_strchr_find_null_test},
+		{"find first char", ft_strchr_find_first_char_test},
+		{"find last char", ft_strchr_find_last_char_test},
+		{"not found 'x'", ft_strchr_not_found_test},
+		{"find unsigned char (200)", ft_strchr_uchar_test},
+		{"find c > 255 (wraps to char)", ft_strchr_over_255_test},
+		{"NULL (should crash)", ft_strchr_null_test, .crash = 1}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strchr", num_tests, tests, passed);
+	run_tests("ft_strchr", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -789,32 +525,19 @@ static void	ft_strrchr_null_test(void) {
 }
 
 static void	test_ft_strrchr(void) {
-	const char		*tests[] = {
-		"find last 'o'",
-		"find 'W'",
-		"find '\\0'",
-		"find first char",
-		"find last char",
-		"not found 'x'",
-		"find unsigned char (200)",
-		"find c > 255 (wraps to char)",
-		"NULL (should crash)"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strrchr_find_last_o_test),
-		!forked_test(ft_strrchr_find_W_test),
-		!forked_test(ft_strrchr_find_null_test),
-		!forked_test(ft_strrchr_find_first_char_test),
-		!forked_test(ft_strrchr_find_last_char_test),
-		!forked_test(ft_strrchr_not_found_test),
-		!forked_test(ft_strrchr_uchar_test),
-		!forked_test(ft_strrchr_over_255_test),
-		forked_test(ft_strrchr_null_test)
+	const t_test	tests[] = {
+		{"find last 'o'", ft_strrchr_find_last_o_test},
+		{"find 'W'", ft_strrchr_find_W_test},
+		{"find '\\0'", ft_strrchr_find_null_test},
+		{"find first char", ft_strrchr_find_first_char_test},
+		{"find last char", ft_strrchr_find_last_char_test},
+		{"not found 'x'", ft_strrchr_not_found_test},
+		{"find unsigned char (200)", ft_strrchr_uchar_test},
+		{"find c > 255 (wraps to char)", ft_strrchr_over_255_test},
+		{"NULL (should crash)", ft_strrchr_null_test, .crash = 1}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strrchr", num_tests, tests, passed);
+	run_tests("ft_strrchr", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -827,7 +550,7 @@ static void	ft_strncmp_equal_test(void) {
 }
 
 static void	ft_strncmp_different_test(void) {
-	if (!ft_strncmp("Hello", "World", 5))
+	if (ft_strncmp("Hello", "World", 5) >= 0)
 		abort();
 }
 
@@ -867,32 +590,19 @@ static void	ft_strncmp_null_test(void) {
 }
 
 static void	test_ft_strncmp(void) {
-	const char		*tests[] = {
-		"equal strings",
-		"different strings",
-		"partial compare",
-		"n = 0",
-		"with \\0",
-		"n > strlen",
-		"unsigned char comparison",
-		"SIZE_MAX",
-		"NULL (should crash)"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strncmp_equal_test),
-		!forked_test(ft_strncmp_different_test),
-		!forked_test(ft_strncmp_partial_test),
-		!forked_test(ft_strncmp_n_zero_test),
-		!forked_test(ft_strncmp_with_null_test),
-		!forked_test(ft_strncmp_n_gt_strlen_test),
-		!forked_test(ft_strncmp_uchar_test),
-		!forked_test(ft_strncmp_size_max_test),
-		forked_test(ft_strncmp_null_test)
+	const t_test	tests[] = {
+		{"equal strings", ft_strncmp_equal_test},
+		{"different strings (sign)", ft_strncmp_different_test},
+		{"partial compare", ft_strncmp_partial_test},
+		{"n = 0", ft_strncmp_n_zero_test},
+		{"with \\0", ft_strncmp_with_null_test},
+		{"n > strlen", ft_strncmp_n_gt_strlen_test},
+		{"unsigned char comparison", ft_strncmp_uchar_test},
+		{"SIZE_MAX", ft_strncmp_size_max_test},
+		{"NULL (should crash)", ft_strncmp_null_test, .crash = 1}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strncmp", num_tests, tests, passed);
+	run_tests("ft_strncmp", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -941,28 +651,17 @@ static void	ft_memchr_over_255_test(void) {
 }
 
 static void	test_ft_memchr(void) {
-	const char		*tests[] = {
-		"find last 'o'",
-		"find 'W'",
-		"find '\\0'",
-		"not found 'x'",
-		"find unsigned char (200)",
-		"find c > 255 (wraps to char)",
-		"NULL"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_memchr_find_o_test),
-		!forked_test(ft_memchr_find_W_test),
-		!forked_test(ft_memchr_not_found_test),
-		!forked_test(ft_memchr_n_zero_test),
-		!forked_test(ft_memchr_nullchar_test),
-		!forked_test(ft_memchr_uchar_test),
-		!forked_test(ft_memchr_over_255_test)
+	const t_test	tests[] = {
+		{"find first 'o'", ft_memchr_find_o_test},
+		{"find 'W'", ft_memchr_find_W_test},
+		{"not found 'x'", ft_memchr_not_found_test},
+		{"n = 0", ft_memchr_n_zero_test},
+		{"find '\\0'", ft_memchr_nullchar_test},
+		{"find unsigned char (255)", ft_memchr_uchar_test},
+		{"find c > 255 (wraps to char)", ft_memchr_over_255_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_memchr", num_tests, tests, passed);
+	run_tests("ft_memchr", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1005,27 +704,23 @@ static void	ft_memcmp_symmetry_test(void) {
 		abort();
 }
 
+static void	ft_memcmp_past_nul_test(void) {
+	if (ft_memcmp("ab\0c", "ab\0d", 4) >= 0)
+		abort();
+}
+
 static void	test_ft_memcmp(void) {
-	const char		*tests[] = {
-		"equal",
-		"different",
-		"n = 0",
-		"binary data",
-		"unsigned char > 127 (\\200 vs \\0)",
-		"unsigned char symmetry"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_memcmp_equal_test),
-		!forked_test(ft_memcmp_different_test),
-		!forked_test(ft_memcmp_n_zero_test),
-		!forked_test(ft_memcmp_binary_test),
-		!forked_test(ft_memcmp_uchar_gt_127_test),
-		!forked_test(ft_memcmp_symmetry_test)
+	const t_test	tests[] = {
+		{"equal", ft_memcmp_equal_test},
+		{"different", ft_memcmp_different_test},
+		{"n = 0", ft_memcmp_n_zero_test},
+		{"binary data", ft_memcmp_binary_test},
+		{"unsigned char > 127 (\\200 vs \\0)", ft_memcmp_uchar_gt_127_test},
+		{"unsigned char symmetry", ft_memcmp_symmetry_test},
+		{"does not stop at '\\0'", ft_memcmp_past_nul_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_memcmp", num_tests, tests, passed);
+	run_tests("ft_memcmp", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1034,13 +729,13 @@ static void	test_ft_memcmp(void) {
 
 static void	ft_strnstr_find_world_test(void) {
 	const char *haystack = "Hello, World!";
-	if (!ft_strnstr(haystack, "World", 13))
+	if (ft_strnstr(haystack, "World", 13) != haystack + 7)
 		abort();
 }
 
 static void	ft_strnstr_find_o_test(void) {
 	const char *haystack = "Hello, World!";
-	if (!ft_strnstr(haystack, "o", 13))
+	if (ft_strnstr(haystack, "o", 13) != haystack + 4)
 		abort();
 }
 
@@ -1053,6 +748,18 @@ static void	ft_strnstr_not_found_test(void) {
 static void	ft_strnstr_empty_needle_test(void) {
 	const char *haystack = "Hello, World!";
 	if (ft_strnstr(haystack, "", 13) != haystack)
+		abort();
+}
+
+static void	ft_strnstr_partial_match_test(void) {
+	const char *haystack = "aaabc";
+	if (ft_strnstr(haystack, "aab", 5) != haystack + 1)
+		abort();
+}
+
+static void	ft_strnstr_len_exact_test(void) {
+	const char *haystack = "Hello World";
+	if (ft_strnstr(haystack, "World", 11) != haystack + 6)
 		abort();
 }
 
@@ -1077,30 +784,20 @@ static void	ft_strnstr_needle_longer_test(void) {
 }
 
 static void	test_ft_strnstr(void) {
-	const char		*tests[] = {
-		"find 'World'",
-		"find 'o'",
-		"not found",
-		"empty needle",
-		"len too short",
-		"len = 0",
-		"needle cut by len",
-		"needle longer than haystack"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strnstr_find_world_test),
-		!forked_test(ft_strnstr_find_o_test),
-		!forked_test(ft_strnstr_not_found_test),
-		!forked_test(ft_strnstr_empty_needle_test),
-		!forked_test(ft_strnstr_len_too_short_test),
-		!forked_test(ft_strnstr_len_zero_test),
-		!forked_test(ft_strnstr_needle_cut_test),
-		!forked_test(ft_strnstr_needle_longer_test)
+	const t_test	tests[] = {
+		{"find 'World'", ft_strnstr_find_world_test},
+		{"find 'o'", ft_strnstr_find_o_test},
+		{"not found", ft_strnstr_not_found_test},
+		{"empty needle", ft_strnstr_empty_needle_test},
+		{"match after a partial match", ft_strnstr_partial_match_test},
+		{"needle ends exactly at len", ft_strnstr_len_exact_test},
+		{"len too short", ft_strnstr_len_too_short_test},
+		{"len = 0", ft_strnstr_len_zero_test},
+		{"needle cut by len", ft_strnstr_needle_cut_test},
+		{"needle longer than haystack", ft_strnstr_needle_longer_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strnstr", num_tests, tests, passed);
+	run_tests("ft_strnstr", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1182,44 +879,25 @@ static void	ft_atoi_null_test(void) {
 }
 
 static void	test_ft_atoi(void) {
-	const char		*tests[] = {
-		"'  \\t\\n\\v\\f\\r +42   $'",
-		"'\\v \\t\\r  \\n    \\f-42   *'",
-		"'0'",
-		"'++2'",
-		"'--4'",
-		"'-+9'",
-		"'+-8'",
-		"' \\t-R66'",
-		"INT_MAX",
-		"INT_MIN",
-		"empty string",
-		"lone sign ('+', '-')",
-		"leading zeros ('0042')",
-		"trailing junk ('42abc')",
-		"NULL (should crash)"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_atoi_whitespace_plus_test),
-		!forked_test(ft_atoi_whitespace_minus_test),
-		!forked_test(ft_atoi_zero_test),
-		!forked_test(ft_atoi_double_plus_test),
-		!forked_test(ft_atoi_double_minus_test),
-		!forked_test(ft_atoi_minus_plus_test),
-		!forked_test(ft_atoi_plus_minus_test),
-		!forked_test(ft_atoi_minus_letter_test),
-		!forked_test(ft_atoi_int_max_test),
-		!forked_test(ft_atoi_int_min_test),
-		!forked_test(ft_atoi_empty_test),
-		!forked_test(ft_atoi_lone_sign_test),
-		!forked_test(ft_atoi_leading_zeros_test),
-		!forked_test(ft_atoi_trailing_junk_test),
-		forked_test(ft_atoi_null_test)
+	const t_test	tests[] = {
+		{"'  \\t\\n\\v\\f\\r +42   $'", ft_atoi_whitespace_plus_test},
+		{"'\\v \\t\\r  \\n    \\f-42   *'", ft_atoi_whitespace_minus_test},
+		{"'0'", ft_atoi_zero_test},
+		{"'++2'", ft_atoi_double_plus_test},
+		{"'--4'", ft_atoi_double_minus_test},
+		{"'-+9'", ft_atoi_minus_plus_test},
+		{"'+-8'", ft_atoi_plus_minus_test},
+		{"' \\t-R66'", ft_atoi_minus_letter_test},
+		{"INT_MAX", ft_atoi_int_max_test},
+		{"INT_MIN", ft_atoi_int_min_test},
+		{"empty string", ft_atoi_empty_test},
+		{"lone sign ('+', '-')", ft_atoi_lone_sign_test},
+		{"leading zeros ('0042')", ft_atoi_leading_zeros_test},
+		{"trailing junk ('42abc')", ft_atoi_trailing_junk_test},
+		{"NULL (should crash)", ft_atoi_null_test, .crash = 1}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_atoi", num_tests, tests, passed);
+	run_tests("ft_atoi", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1228,6 +906,8 @@ static void	test_ft_atoi(void) {
 
 static void	ft_calloc_all_zeros_test(void) {
 	int *arr = ft_calloc(5, sizeof(int));
+	if (!arr || alloc_size(arr) < 5 * sizeof(int))
+		abort();
 	for (int i = 0; i < 5; i++)
 		if (arr[i] != 0)
 			abort();
@@ -1241,45 +921,30 @@ static void	ft_calloc_overflow_test(void) {
 		abort();
 }
 
+// Subject: if nmemb or size is 0, return a unique pointer that can be passed to free()
 static void	ft_calloc_zero_count_test(void) {
-	g_malloc_count = 0;
-	g_malloc_fail_at = 0;
-	g_malloc_wrap_enabled = 1;
 	void *ptr = ft_calloc(0, 5);
-	g_malloc_wrap_enabled = 0;
-	if (ptr && !g_malloc_zero)
+	if (!ptr)
 		abort();
 	free(ptr);
 }
 
 static void	ft_calloc_zero_size_test(void) {
-	g_malloc_count = 0;
-	g_malloc_fail_at = 0;
-	g_malloc_wrap_enabled = 1;
 	void *ptr = ft_calloc(5, 0);
-	g_malloc_wrap_enabled = 0;
-	if (ptr && !g_malloc_zero)
+	if (!ptr)
 		abort();
 	free(ptr);
 }
 
 static void	test_ft_calloc(void) {
-	const char		*tests[] = {
-		"all zeros'",
-		"overflow",
-		"count = 0",
-		"size = 0"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_calloc_all_zeros_test),
-		!forked_test(ft_calloc_overflow_test),
-		!forked_test(ft_calloc_zero_count_test),
-		!forked_test(ft_calloc_zero_size_test)
+	const t_test	tests[] = {
+		{"all zeros", ft_calloc_all_zeros_test},
+		{"overflow", ft_calloc_overflow_test},
+		{"count = 0 (freeable pointer)", ft_calloc_zero_count_test},
+		{"size = 0 (freeable pointer)", ft_calloc_zero_size_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_calloc", num_tests, tests, passed);
+	run_tests("ft_calloc", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1287,31 +952,20 @@ static void	test_ft_calloc(void) {
 /* ************************************************************************** */
 
 static void	ft_strdup_basic_test(void) {
-	char *dup = ft_strdup("Hello");
-	if (strcmp(dup, "Hello"))
-		abort();
-	free(dup);
+	check_str(ft_strdup("Hello"), "Hello");
 }
 
 static void	ft_strdup_empty_test(void) {
-	char *dup = ft_strdup("");
-	dup[0] = 'a';
-	free(dup);
+	check_str(ft_strdup(""), "");
 }
 
 static void	test_ft_strdup(void) {
-	const char		*tests[] = {
-		"basic dup",
-		"empty string"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strdup_basic_test),
-		!forked_test(ft_strdup_empty_test)
+	const t_test	tests[] = {
+		{"basic dup", ft_strdup_basic_test},
+		{"empty string", ft_strdup_empty_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strdup", num_tests, tests, passed);
+	run_tests("ft_strdup", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1319,73 +973,36 @@ static void	test_ft_strdup(void) {
 /* ************************************************************************** */
 
 static void	ft_substr_basic_test(void) {
-	char *sub = ft_substr("Hello, World!", 7, 5);
-	if (strcmp(sub, "World"))
-		abort();
-	free(sub);
+	check_str(ft_substr("Hello, World!", 7, 5), "World");
 }
 
 static void	ft_substr_from_start_test(void) {
-	char *sub = ft_substr("Hello", 0, 3);
-	if (strcmp(sub, "Hel"))
-		abort();
-	free(sub);
+	check_str(ft_substr("Hello", 0, 3), "Hel");
 }
 
 static void	ft_substr_start_gt_len_test(void) {
-	char *sub = ft_substr("Hello", 10, 5);
-	if (strcmp(sub, ""))
-		abort();
-	free(sub);
+	check_str(ft_substr("Hello", 10, 5), "");
 }
 
 static void	ft_substr_len_too_long_test(void) {
-	char *sub = ft_substr("Hello", 2, 100);
-	if (strcmp(sub, "llo"))
-		abort();
-	free(sub);
+	check_str(ft_substr("Hello", 2, 100), "llo");
 }
 
 static void	ft_substr_len_zero_test(void) {
-	char *sub = ft_substr("test", 0, 0);
-	if (strcmp(sub, ""))
-		abort();
-	free(sub);
-}
-
-static void	ft_substr_empty_test(void) {
-	char *sub1 = ft_substr("Hello", 10, 5);
-	char *sub2 = ft_substr("test", 0, 0);
-	sub1[0] = 'a';
-	free(sub1);
-	sub2[0] = 'a';
-	free(sub2);
+	check_str(ft_substr("test", 0, 0), "");
 }
 
 static void	ft_substr_start_past_end_test(void) {
-	char *res = ft_substr("", 1, 1);
-	if (!res || res[0] != '\0')
-		abort();
-	free(res);
-	res = ft_substr("abc", 5, 2);
-	if (!res || res[0] != '\0')
-		abort();
-	free(res);
+	check_str(ft_substr("", 1, 1), "");
+	check_str(ft_substr("abc", 5, 2), "");
 }
 
 static void	ft_substr_start_max_test(void) {
-	char *res = ft_substr("abc", ~(unsigned int)0, 1);
-	if (!res || res[0] != '\0')
-		abort();
-	free(res);
+	check_str(ft_substr("abc", ~(unsigned int)0, 1), "");
 }
 
 static void	ft_substr_len_size_max_test(void) {
-	const size_t size_max = ~(size_t)0;
-	char *res = ft_substr("Hello", 0, size_max);
-	if (!res || strcmp(res, "Hello"))
-		abort();
-	free(res);
+	check_str(ft_substr("Hello", 0, ~(size_t)0), "Hello");
 }
 
 static void	ft_substr_no_modify_test(void) {
@@ -1401,36 +1018,20 @@ static void	ft_substr_null_test(void) {
 }
 
 static void	test_ft_substr(void) {
-	const char		*tests[] = {
-		"basic substr",
-		"from start",
-		"start > len",
-		"len too long",
-		"len = 0",
-		"empty string alloc",
-		"start past end",
-		"start = UINT_MAX",
-		"len = SIZE_MAX",
-		"source not modified",
-		"NULL"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_substr_basic_test),
-		!forked_test(ft_substr_from_start_test),
-		!forked_test(ft_substr_start_gt_len_test),
-		!forked_test(ft_substr_len_too_long_test),
-		!forked_test(ft_substr_len_zero_test),
-		!forked_test(ft_substr_empty_test),
-		!forked_test(ft_substr_start_past_end_test),
-		!forked_test(ft_substr_start_max_test),
-		!forked_test(ft_substr_len_size_max_test),
-		!forked_test(ft_substr_no_modify_test),
-		!forked_test(ft_substr_null_test)
+	const t_test	tests[] = {
+		{"basic substr", ft_substr_basic_test},
+		{"from start", ft_substr_from_start_test},
+		{"start > len", ft_substr_start_gt_len_test},
+		{"len too long", ft_substr_len_too_long_test},
+		{"len = 0", ft_substr_len_zero_test},
+		{"start past end", ft_substr_start_past_end_test},
+		{"start = UINT_MAX", ft_substr_start_max_test},
+		{"len = SIZE_MAX", ft_substr_len_size_max_test},
+		{"source not modified", ft_substr_no_modify_test},
+		{"NULL", ft_substr_null_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_substr", num_tests, tests, passed);
+	run_tests("ft_substr", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1438,24 +1039,15 @@ static void	test_ft_substr(void) {
 /* ************************************************************************** */
 
 static void	ft_strjoin_basic_test(void) {
-	char *joined = ft_strjoin("Hello", " World");
-	if (strcmp(joined, "Hello World"))
-		abort();
-	free(joined);
+	check_str(ft_strjoin("Hello", " World"), "Hello World");
 }
 
 static void	ft_strjoin_empty_s1_test(void) {
-	char *joined = ft_strjoin("", "Hello");
-	if (strcmp(joined, "Hello"))
-		abort();
-	free(joined);
+	check_str(ft_strjoin("", "Hello"), "Hello");
 }
 
 static void	ft_strjoin_empty_s2_test(void) {
-	char *joined = ft_strjoin("Hello", "");
-	if (strcmp(joined, "Hello"))
-		abort();
-	free(joined);
+	check_str(ft_strjoin("Hello", ""), "Hello");
 }
 
 static void	ft_strjoin_null_s1_test(void) {
@@ -1480,28 +1072,17 @@ static void	ft_strjoin_no_modify_test(void) {
 }
 
 static void	test_ft_strjoin(void) {
-	const char		*tests[] = {
-		"basic join",
-		"empty s1",
-		"empty s2",
-		"sources not modified",
-		"NULL s1",
-		"NULL s2",
-		"both NULL"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strjoin_basic_test),
-		!forked_test(ft_strjoin_empty_s1_test),
-		!forked_test(ft_strjoin_empty_s2_test),
-		!forked_test(ft_strjoin_no_modify_test),
-		!forked_test(ft_strjoin_null_s1_test),
-		!forked_test(ft_strjoin_null_s2_test),
-		!forked_test(ft_strjoin_null_both_test)
+	const t_test	tests[] = {
+		{"basic join", ft_strjoin_basic_test},
+		{"empty s1", ft_strjoin_empty_s1_test},
+		{"empty s2", ft_strjoin_empty_s2_test},
+		{"sources not modified", ft_strjoin_no_modify_test},
+		{"NULL s1", ft_strjoin_null_s1_test},
+		{"NULL s2", ft_strjoin_null_s2_test},
+		{"both NULL", ft_strjoin_null_both_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strjoin", num_tests, tests, passed);
+	run_tests("ft_strjoin", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1509,49 +1090,35 @@ static void	test_ft_strjoin(void) {
 /* ************************************************************************** */
 
 static void	ft_strtrim_spaces_test(void) {
-	char *trimmed = ft_strtrim("   Hello   ", " ");
-	if (strcmp(trimmed, "Hello"))
-		abort();
-	free(trimmed);
+	check_str(ft_strtrim("   Hello   ", " "), "Hello");
 }
 
 static void	ft_strtrim_custom_set_test(void) {
-	char *trimmed = ft_strtrim("xxxHelloxxx", "x");
-	if (strcmp(trimmed, "Hello"))
-		abort();
-	free(trimmed);
+	check_str(ft_strtrim("xxxHelloxxx", "x"), "Hello");
 }
 
 static void	ft_strtrim_no_trim_test(void) {
-	char *trimmed = ft_strtrim("Hello", "xyz");
-	if (strcmp(trimmed, "Hello"))
-		abort();
-	free(trimmed);
+	check_str(ft_strtrim("Hello", "xyz"), "Hello");
 }
 
 static void	ft_strtrim_multiple_test(void) {
-	char *trimmed = ft_strtrim("abcdcba", "abc");
-	if (strcmp(trimmed, "d"))
-		abort();
-	free(trimmed);
+	check_str(ft_strtrim("abcdcba", "abc"), "d");
+}
+
+static void	ft_strtrim_inner_kept_test(void) {
+	check_str(ft_strtrim("xxHelloxWorldxx", "x"), "HelloxWorld");
 }
 
 static void	ft_strtrim_no_set_test(void) {
-	char *trimmed = ft_strtrim("Hello", "");
-	if (strcmp(trimmed, "Hello"))
-		abort();
-	free(trimmed);
+	check_str(ft_strtrim("Hello", ""), "Hello");
 }
 
 static void	ft_strtrim_empty_string_test(void) {
-	ft_strtrim("", " ");
+	check_str(ft_strtrim("", " "), "");
 }
 
 static void	ft_strtrim_all_trim_test(void) {
-	char *trimmed = ft_strtrim("xxxxx", "x");
-	if (!trimmed || trimmed[0])
-		abort();
-	free(trimmed);
+	check_str(ft_strtrim("xxxxx", "x"), "");
 }
 
 static void	ft_strtrim_null_input_test(void) {
@@ -1575,36 +1142,22 @@ static void	ft_strtrim_no_modify_test(void) {
 }
 
 static void	test_ft_strtrim(void) {
-	const char		*tests[] = {
-		"spaces",
-		"custom set",
-		"no trim",
-		"multiple occurrences",
-		"no set",
-		"empty string",
-		"all trim",
-		"NULL input",
-		"NULL set",
-		"both NULL",
-		"source not modified"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strtrim_spaces_test),
-		!forked_test(ft_strtrim_custom_set_test),
-		!forked_test(ft_strtrim_no_trim_test),
-		!forked_test(ft_strtrim_multiple_test),
-		!forked_test(ft_strtrim_no_set_test),
-		!forked_test(ft_strtrim_empty_string_test),
-		!forked_test(ft_strtrim_all_trim_test),
-		!forked_test(ft_strtrim_null_input_test),
-		!forked_test(ft_strtrim_null_set_test),
-		!forked_test(ft_strtrim_null_both_test),
-		!forked_test(ft_strtrim_no_modify_test)
+	const t_test	tests[] = {
+		{"spaces", ft_strtrim_spaces_test},
+		{"custom set", ft_strtrim_custom_set_test},
+		{"no trim", ft_strtrim_no_trim_test},
+		{"multiple occurrences", ft_strtrim_multiple_test},
+		{"set chars kept inside", ft_strtrim_inner_kept_test},
+		{"no set", ft_strtrim_no_set_test},
+		{"empty string", ft_strtrim_empty_string_test},
+		{"all trim", ft_strtrim_all_trim_test},
+		{"NULL input", ft_strtrim_null_input_test},
+		{"NULL set", ft_strtrim_null_set_test},
+		{"both NULL", ft_strtrim_null_both_test},
+		{"source not modified", ft_strtrim_no_modify_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strtrim", num_tests, tests, passed);
+	run_tests("ft_strtrim", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1664,47 +1217,34 @@ static void	ft_split_null_test(void) {
 	ft_split(NULL, ' ');
 }
 
+// Subject: NULL if any allocation fails
 static void	ft_split_malloc_fail_test(void) {
-	g_malloc_count = 0;
-	++g_malloc_fail_at;
-	char **result = ft_split("Hello World Test", ' ');
-	(void)result;
+	g_malloc_wrap_enabled = 1;
+	char **arr = ft_split("Hello World Test", ' ');
+	g_malloc_wrap_enabled = 0;
+	if (arr && g_malloc_count >= g_malloc_fail_at)
+		abort();
+	safe_free_arr(&arr);
 }
 
 static void	test_ft_split(void) {
-	const char		*tests[] = {
-		"basic split",
-		"multiple delimiters",
-		"empty string",
-		"all delimiters",
-		"delimiter = '\\0'",
-		"no delimiter found",
-		"delimiter = 255 (\\xFF)",
-		"NULL",
-		"malloc fail #1 (array)",
-		"malloc fail #2 (word 1)",
-		"malloc fail #3 (word 2)",
-		"malloc fail #4 (word 3)",
-		"malloc fail #5 (other)"
+	const t_test	tests[] = {
+		{"basic split", ft_split_basic_test},
+		{"multiple delimiters", ft_split_multiple_delim_test},
+		{"empty string", ft_split_empty_string_test},
+		{"all delimiters", ft_split_all_delim_test},
+		{"delimiter = '\\0'", ft_split_delim_null_test},
+		{"no delimiter found", ft_split_no_delim_found_test},
+		{"delimiter = 255 (\\xFF)", ft_split_delim_255_test},
+		{"NULL", ft_split_null_test},
+		{"malloc fail #1 (array)", ft_split_malloc_fail_test, .fail_at = 1},
+		{"malloc fail #2 (word 1)", ft_split_malloc_fail_test, .fail_at = 2},
+		{"malloc fail #3 (word 2)", ft_split_malloc_fail_test, .fail_at = 3},
+		{"malloc fail #4 (word 3)", ft_split_malloc_fail_test, .fail_at = 4},
+		{"malloc fail #5 (other)", ft_split_malloc_fail_test, .fail_at = 5}
 	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	int				passed[num_tests];
 
-	passed[0] = !forked_test(ft_split_basic_test);
-	passed[1] = !forked_test(ft_split_multiple_delim_test);
-	passed[2] = !forked_test(ft_split_empty_string_test);
-	passed[3] = !forked_test(ft_split_all_delim_test);
-	passed[4] = !forked_test(ft_split_delim_null_test);
-	passed[5] = !forked_test(ft_split_no_delim_found_test);
-	passed[6] = !forked_test(ft_split_delim_255_test);
-	passed[7] = !forked_test(ft_split_null_test);
-	g_malloc_wrap_enabled = 1;
-	g_malloc_fail_at = 0;
-	for (int i = 8; i < 13; i++)
-		passed[i] = !forked_test(ft_split_malloc_fail_test);
-	g_malloc_wrap_enabled = 0;
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_split", num_tests, tests, passed);
+	run_tests("ft_split", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1712,59 +1252,35 @@ static void	test_ft_split(void) {
 /* ************************************************************************** */
 
 static void	ft_itoa_42_test(void) {
-	char *str = ft_itoa(42);
-	if (strcmp(str, "42"))
-		abort();
-	free(str);
+	check_str(ft_itoa(42), "42");
 }
 
 static void	ft_itoa_minus_42_test(void) {
-	char *str = ft_itoa(-42);
-	if (strcmp(str, "-42"))
-		abort();
-	free(str);
+	check_str(ft_itoa(-42), "-42");
 }
 
 static void	ft_itoa_zero_test(void) {
-	char *str = ft_itoa(0);
-	if (strcmp(str, "0"))
-		abort();
-	free(str);
+	check_str(ft_itoa(0), "0");
 }
 
 static void	ft_itoa_int_min_test(void) {
-	char *str = ft_itoa(-2147483648);
-	if (strcmp(str, "-2147483648"))
-		abort();
-	free(str);
+	check_str(ft_itoa(-2147483648), "-2147483648");
 }
 
 static void	ft_itoa_int_max_test(void) {
-	char *str = ft_itoa(2147483647);
-	if (strcmp(str, "2147483647"))
-		abort();
-	free(str);
+	check_str(ft_itoa(2147483647), "2147483647");
 }
 
 static void	test_ft_itoa(void) {
-	const char		*tests[] = {
-		"42",
-		"-42",
-		"0",
-		"INT_MIN",
-		"INT_MAX"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_itoa_42_test),
-		!forked_test(ft_itoa_minus_42_test),
-		!forked_test(ft_itoa_zero_test),
-		!forked_test(ft_itoa_int_min_test),
-		!forked_test(ft_itoa_int_max_test)
+	const t_test	tests[] = {
+		{"42", ft_itoa_42_test},
+		{"-42", ft_itoa_minus_42_test},
+		{"0", ft_itoa_zero_test},
+		{"INT_MIN", ft_itoa_int_min_test},
+		{"INT_MAX", ft_itoa_int_max_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_itoa", num_tests, tests, passed);
+	run_tests("ft_itoa", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1776,17 +1292,11 @@ static char	mapi_func(unsigned int i, char c) {
 }
 
 static void	ft_strmapi_basic_test(void) {
-	char *result = ft_strmapi("abc", mapi_func);
-	if (!result || result[0] != 'a' || result[1] != 'c' || result[2] != 'e')
-		abort();
-	free(result);
+	check_str(ft_strmapi("abc", mapi_func), "ace");
 }
 
 static void	ft_strmapi_empty_test(void) {
-	char *result = ft_strmapi("", mapi_func);
-	if (!result || strcmp(result, ""))
-		abort();
-	free(result);
+	check_str(ft_strmapi("", mapi_func), "");
 }
 
 static void	ft_strmapi_null_input_test(void) {
@@ -1810,26 +1320,16 @@ static void	ft_strmapi_no_modify_test(void) {
 }
 
 static void	test_ft_strmapi(void) {
-	const char		*tests[] = {
-		"basic",
-		"empty string",
-		"NULL input",
-		"f = NULL",
-		"both NULL",
-		"source not modified"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_strmapi_basic_test),
-		!forked_test(ft_strmapi_empty_test),
-		!forked_test(ft_strmapi_null_input_test),
-		!forked_test(ft_strmapi_null_func_test),
-		!forked_test(ft_strmapi_null_both_test),
-		!forked_test(ft_strmapi_no_modify_test)
+	const t_test	tests[] = {
+		{"basic", ft_strmapi_basic_test},
+		{"empty string", ft_strmapi_empty_test},
+		{"NULL input", ft_strmapi_null_input_test},
+		{"f = NULL", ft_strmapi_null_func_test},
+		{"both NULL", ft_strmapi_null_both_test},
+		{"source not modified", ft_strmapi_no_modify_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_strmapi", num_tests, tests, passed);
+	run_tests("ft_strmapi", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1860,22 +1360,14 @@ static void	ft_striteri_null_both_test(void) {
 }
 
 static void	test_ft_striteri(void) {
-	const char		*tests[] = {
-		"basic",
-		"NULL input",
-		"f = NULL",
-		"both NULL"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_striteri_basic_test),
-		!forked_test(ft_striteri_null_input_test),
-		!forked_test(ft_striteri_null_func_test),
-		!forked_test(ft_striteri_null_both_test)
+	const t_test	tests[] = {
+		{"basic", ft_striteri_basic_test},
+		{"NULL input", ft_striteri_null_input_test},
+		{"f = NULL", ft_striteri_null_func_test},
+		{"both NULL", ft_striteri_null_both_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_striteri", num_tests, tests, passed);
+	run_tests("ft_striteri", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1885,26 +1377,20 @@ static void	test_ft_striteri(void) {
 #include <fcntl.h>
 #include <unistd.h>
 
-static int	test_fd_output(void (*func)(void *, int), void *input, 
-							const char *expected, size_t read_len) {
-	char	buf[50] = {0};
-	char	tmp[] = "/tmp/test_fd_XXXXXX";
-	int		fd = mkstemp(tmp);
-	int		result;
+// Calls put(arg, fd) on a pipe and aborts unless exactly `expected` was written
+static void	check_fd_output(void (*put)(void *, int), void *arg, const char *expected) {
+	char	buf[64];
+	int		fds[2];
+	ssize_t	len;
 
-	if (fd == -1)
-		error_exit("libft-fairy: mkstemp failed");
-	func(input, fd);
-	close(fd);
-	fd = open(tmp, O_RDONLY);
-	if (fd == -1)
-		error_exit("libft-fairy: open failed");
-	read(fd, buf, read_len);
-	buf[read_len] = '\0';
-	close(fd);
-	unlink(tmp);
-	result = !strcmp(buf, expected);
-	return (result);
+	if (pipe(fds) == -1)
+		error_exit("libft-fairy: pipe failed");
+	put(arg, fds[1]);
+	close(fds[1]);
+	len = read(fds[0], buf, sizeof(buf));
+	close(fds[0]);
+	if (len != (ssize_t)strlen(expected) || memcmp(buf, expected, len))
+		abort();
 }
 
 static void	wrapper_putchar(void *c, int fd) {
@@ -1918,29 +1404,20 @@ static void	wrapper_putchar_str(void *s, int fd) {
 }
 
 static void	ft_putchar_AB_test(void) {
-	if (!test_fd_output(wrapper_putchar_str, "AB", "AB", 2))
-		abort();
+	check_fd_output(wrapper_putchar_str, "AB", "AB");
 }
 
 static void	ft_putchar_0_test(void) {
-	char c = '0';
-	if (!test_fd_output(wrapper_putchar, &c, "0", 1))
-		abort();
+	check_fd_output(wrapper_putchar, &(char){'0'}, "0");
 }
 
 static void	test_ft_putchar_fd(void) {
-	const char		*tests[] = {
-		"'A' and 'B'",
-		"'0'"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_putchar_AB_test),
-		!forked_test(ft_putchar_0_test)
+	const t_test	tests[] = {
+		{"'A' and 'B'", ft_putchar_AB_test},
+		{"'0'", ft_putchar_0_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_putchar_fd", num_tests, tests, passed);
+	run_tests("ft_putchar_fd", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1952,31 +1429,20 @@ static void	wrapper_putstr(void *s, int fd) {
 }
 
 static void	ft_putstr_hello_test(void) {
-	if (!test_fd_output(wrapper_putstr, "Hello, World!", "Hello, World!", 13))
-		abort();
+	check_fd_output(wrapper_putstr, "Hello, World!", "Hello, World!");
 }
 
 static void	ft_putstr_null_test(void) {
-	char	tmp[] = "/tmp/putstr_fd_null_test_XXXXXX";
-	int		fd = mkstemp(tmp);
-	ft_putstr_fd(NULL, fd);
-	close(fd);
-	unlink(tmp);
+	ft_putstr_fd(NULL, open("/dev/null", O_WRONLY));
 }
 
 static void	test_ft_putstr_fd(void) {
-	const char		*tests[] = {
-		"'Hello, World!'",
-		"NULL"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_putstr_hello_test),
-		!forked_test(ft_putstr_null_test)
+	const t_test	tests[] = {
+		{"'Hello, World!'", ft_putstr_hello_test},
+		{"NULL", ft_putstr_null_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_putstr_fd", num_tests, tests, passed);
+	run_tests("ft_putstr_fd", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -1988,38 +1454,25 @@ static void	wrapper_putendl(void *s, int fd) {
 }
 
 static void	ft_putendl_hello_test(void) {
-	if (!test_fd_output(wrapper_putendl, "Hello", "Hello\n", 6))
-		abort();
+	check_fd_output(wrapper_putendl, "Hello", "Hello\n");
 }
 
 static void	ft_putendl_empty_test(void) {
-	if (!test_fd_output(wrapper_putendl, "", "\n", 1))
-		abort();
+	check_fd_output(wrapper_putendl, "", "\n");
 }
 
 static void	ft_putendl_null_test(void) {
-	char	tmp[] = "/tmp/putendl_fd_null_test_XXXXXX";
-	int		fd = mkstemp(tmp);
-	ft_putendl_fd(NULL, fd);
-	close(fd);
-	unlink(tmp);
+	ft_putendl_fd(NULL, open("/dev/null", O_WRONLY));
 }
 
 static void	test_ft_putendl_fd(void) {
-	const char		*tests[] = {
-		"'Hello' with newline",
-		"empty string with newline",
-		"NULL"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_putendl_hello_test),
-		!forked_test(ft_putendl_empty_test),
-		!forked_test(ft_putendl_null_test)
+	const t_test	tests[] = {
+		{"'Hello' with newline", ft_putendl_hello_test},
+		{"empty string with newline", ft_putendl_empty_test},
+		{"NULL", ft_putendl_null_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_putendl_fd", num_tests, tests, passed);
+	run_tests("ft_putendl_fd", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -2031,49 +1484,35 @@ static void	wrapper_putnbr(void *n, int fd) {
 }
 
 static void	ft_putnbr_42_test(void) {
-	if (!test_fd_output(wrapper_putnbr, &(int){42}, "42", 2))
-		abort();
+	check_fd_output(wrapper_putnbr, &(int){42}, "42");
 }
 
 static void	ft_putnbr_minus_42_test(void) {
-	if (!test_fd_output(wrapper_putnbr, &(int){-42}, "-42", 3))
-		abort();
+	check_fd_output(wrapper_putnbr, &(int){-42}, "-42");
 }
 
 static void	ft_putnbr_zero_test(void) {
-	if (!test_fd_output(wrapper_putnbr, &(int){0}, "0", 1))
-		abort();
+	check_fd_output(wrapper_putnbr, &(int){0}, "0");
 }
 
 static void	ft_putnbr_int_min_test(void) {
-	if (!test_fd_output(wrapper_putnbr, &(int){-2147483648}, "-2147483648", 11))
-		abort();
+	check_fd_output(wrapper_putnbr, &(int){-2147483648}, "-2147483648");
 }
 
 static void	ft_putnbr_int_max_test(void) {
-	if (!test_fd_output(wrapper_putnbr, &(int){2147483647}, "2147483647", 10))
-		abort();
+	check_fd_output(wrapper_putnbr, &(int){2147483647}, "2147483647");
 }
 
 static void	test_ft_putnbr_fd(void) {
-	const char		*tests[] = {
-		"42",
-		"-42",
-		"0",
-		"INT_MIN",
-		"INT_MAX"
-	};
-	const size_t	num_tests = ARRAY_SIZE(tests);
-	const int		passed[] = {
-		!forked_test(ft_putnbr_42_test),
-		!forked_test(ft_putnbr_minus_42_test),
-		!forked_test(ft_putnbr_zero_test),
-		!forked_test(ft_putnbr_int_min_test),
-		!forked_test(ft_putnbr_int_max_test)
+	const t_test	tests[] = {
+		{"42", ft_putnbr_42_test},
+		{"-42", ft_putnbr_minus_42_test},
+		{"0", ft_putnbr_zero_test},
+		{"INT_MIN", ft_putnbr_int_min_test},
+		{"INT_MAX", ft_putnbr_int_max_test}
 	};
 
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results("ft_putnbr_fd", num_tests, tests, passed);
+	run_tests("ft_putnbr_fd", tests, ARRAY_SIZE(tests));
 }
 
 /* ************************************************************************** */
@@ -2081,11 +1520,11 @@ static void	test_ft_putnbr_fd(void) {
 /* ************************************************************************** */
 
 int	main(void) {
-	test_ft_isalpha();
-	test_ft_isdigit();
-	test_ft_isalnum();
-	test_ft_isascii();
-	test_ft_isprint();
+	test_char_func("ft_isalpha", ft_isalpha, isalpha, 1);
+	test_char_func("ft_isdigit", ft_isdigit, isdigit, 1);
+	test_char_func("ft_isalnum", ft_isalnum, isalnum, 1);
+	test_char_func("ft_isascii", ft_isascii, isascii, 1);
+	test_char_func("ft_isprint", ft_isprint, isprint, 1);
 	test_ft_strlen();
 	test_ft_memset();
 	test_ft_bzero();
@@ -2093,8 +1532,8 @@ int	main(void) {
 	test_ft_memmove();
 	test_ft_strlcpy();
 	test_ft_strlcat();
-	test_ft_toupper();
-	test_ft_tolower();
+	test_char_func("ft_toupper", ft_toupper, toupper, 0);
+	test_char_func("ft_tolower", ft_tolower, tolower, 0);
 	test_ft_strchr();
 	test_ft_strrchr();
 	test_ft_strncmp();
