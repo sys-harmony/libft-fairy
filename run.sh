@@ -1,181 +1,265 @@
 #!/bin/bash
+# libft-fairy: a tester for 42's libft (subject v19.3, linked lists mandatory).
+# Clone it inside your libft repository, then: ./run.sh [-v|--verbose]
+
+# ═════════════════════════════════ fairy core ═════════════════════════════════
+# Identical in libft-fairy, printf-fairy and gnl-fairy: display, steps, the
+# checks the three subjects share, and the parallel test runner.
 
 set -u
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-PINK='\033[0;95m'
-YELLOW='\033[0;33m'
-RESET='\033[0m'
-TIMEOUT_SEC=10	# per test binary; each forked test also has its own TEST_TIMEOUT
-
+RED=$'\033[31m' GREEN=$'\033[32m' YELLOW=$'\033[33m' PINK=$'\033[95m'
+BOLD=$'\033[1m' DIM=$'\033[2m' RESET=$'\033[0m'
+WIDTH=46                        # banner width; every status word ends there
+JOBS=$(nproc 2> /dev/null || echo 4)
 VERBOSE=0
+
 for arg in "$@"; do
     case $arg in
-        -v|--verbose)
-            VERBOSE=1
-            ;;
+        -v|--verbose) VERBOSE=1 ;;
+        -h|--help)    echo "usage: $0 [-v|--verbose]"; exit 0 ;;
+        *)            echo "usage: $0 [-v|--verbose]" >&2; exit 2 ;;
     esac
 done
 
-cd "$(dirname "$0")" || exit 1
-LIBFT_DIR=".."
-LIBFT_A="$LIBFT_DIR/libft.a"
-MAKEFILE_PATH="$LIBFT_DIR/Makefile"
-BASIC_TESTER_NAME=".basic_tests"
-LEAK_TESTER_NAME=".leak_tests"
-LISTS_BASIC_TESTER_NAME=".basic_tests_lists"
-LISTS_LEAK_TESTER_NAME=".leak_tests_lists"
+TESTER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+TESTER=$(basename "$TESTER_DIR")
+cd "$TESTER_DIR/.." || exit 1
+TMP=$(mktemp -d "/tmp/$TESTER.XXXXXX") || exit 1
+export FAIRY_STATS=$TMP/stats   # each test binary appends "passed failed warned"
+FAILED=0 WARNED=0 FAILED_STEPS="" START=$(date +%s%N)
+declare -A PIDS
 
-for tool in gcc make valgrind norminette nm; do
-    if ! command -v "$tool" > /dev/null; then
-        echo "libft-fairy: '$tool' is required but not installed"
-        exit 1
+# ---- display -----------------------------------------------------------------
+# box <color> <text> [emoji]: a WIDTH-wide double-line box, text centered
+box() {
+    local text=$2 w=${#2} bar l
+    [[ -n ${3:-} ]] && text+=" $3" w=$((w + 3))
+    printf -v bar '%*s' $((WIDTH - 2)) ''
+    l=$(( (WIDTH - 2 - w) / 2 ))
+    printf '%s╔%s╗\n║%*s%s%*s║\n╚%s╝%s\n' "$1" "${bar// /═}" $l '' "$text" \
+        $((WIDTH - 2 - w - l)) '' "${bar// /═}" "$RESET"
+}
+
+# step <emoji> <label> opens a step line; ok, fail, warn or note closes it with
+# a dot leader and a status word ending in column WIDTH. Details go below.
+step() { STEP=$2 STEP_COL=$((${#2} + 4)); printf '%s %s ' "$1" "$2"; }
+status() {
+    local dots
+    printf -v dots '%*s' $((WIDTH - STEP_COL - ${#2} - 1)) ''
+    printf '%s%s%s %s%s%s\n' "$DIM" "${dots// /.}" "$RESET" "$1" "$2" "$RESET"
+}
+ok()   { status "$GREEN" Done; }
+fail() { FAILED=1 FAILED_STEPS+="${FAILED_STEPS:+, }$STEP"; status "$RED" Failed; }
+warn() { WARNED=1; status "$YELLOW" Warning; }
+note() { status "$BOLD" "$1"; }
+# verdict <issues...>: fails with one line per issue, or succeeds
+verdict() { if [[ $# -eq 0 ]]; then ok; else fail; for i in "$@"; do say "$i"; done; fi; }
+
+say()   { printf '   ↳ %s\n' "$*"; }          # one detail line under a step
+quote() { sed 's/^/     /'; }                  # indents what it reads
+
+# section <title>: the header of a block of results, as test binaries print it
+section() {
+    local line n=$((WIDTH - ${#1} - 4))
+    printf -v line '%*s' $((n > 3 ? n : 3)) ''
+    printf '\n%s──%s %s%s%s %s%s%s\n' "$DIM" "$RESET" "$BOLD" "$1" "$RESET" "$DIM" "${line// /─}" "$RESET"
+}
+
+# ---- end of run: cleanup and verdict -----------------------------------------
+clean_project() { :; }
+kill_tree() { local c; for c in $(pgrep -P "$1" 2> /dev/null); do kill_tree "$c"; done; kill "$1" 2> /dev/null; }
+
+finish() {
+    local rc=$? pid total=0 ko=0 secs
+    for pid in $(pgrep -P $$ 2> /dev/null); do kill_tree "$pid"; done
+    if [[ $rc -eq 130 ]]; then
+        clean_project; rm -rf "$TMP"
+        printf '\n%sInterrupted: no verdict.%s\n\n' "$YELLOW" "$RESET"
+        return
     fi
-done
-if [ ! -f "$LIBFT_DIR/libft.h" ] || [ ! -f "$MAKEFILE_PATH" ]; then
-    echo "libft-fairy: no libft.h or Makefile in $(cd "$LIBFT_DIR" && pwd), clone me inside your libft repository"
-    exit 1
-fi
-TMP_DIR=$(mktemp -d /tmp/libft_fairy_XXXXXX)
-
-# ---- result accumulators (init up front so the EXIT trap is set -u safe) ----
-NORM_TEST_RES=0
-README_TEST_RES=0
-PROTO_TEST_RES=0
-MAKE_ERRORS=0
-BUILD_FAIL=0
-EXTERN_TEST_RES=0
-BASIC_TESTS_RES=0
-LISTS_BASIC_TESTS_RES=0
-LEAK_TESTS_RES=0
-LISTS_LEAK_TESTS_RES=0
-INTERRUPTED=0
-
-# ---- alignment helpers ------------------------------------------------------
-# Status words are right-aligned with \033[<n>G (absolute cursor column), so
-# emoji width and label length never shift them — no tab arithmetic.
-COL=27
-ok()       { printf "\033[${COL}G  Done\n"; }
-fail()     { printf "\033[${COL}G${RED}Failed${RESET}\n"; }
-timeout_() { printf "\033[26G${YELLOW}Timeout${RESET}\n"; }
-
-tests_ran_ok() {
-    [[ $BASIC_TESTS_RES -eq 0 && $LISTS_BASIC_TESTS_RES -eq 0 \
-        && $LEAK_TESTS_RES -eq 0 && $LISTS_LEAK_TESTS_RES -eq 0 ]]
-}
-
-tests_passed() {
-    [[ $NORM_TEST_RES -eq 0 && $README_TEST_RES -eq 0 && $PROTO_TEST_RES -eq 0 \
-        && $MAKE_ERRORS -eq 0 && $BUILD_FAIL -eq 0 && $EXTERN_TEST_RES -eq 0 ]] && tests_ran_ok
-}
-
-print_result() {
-    echo ""
-    if [ $INTERRUPTED -eq 1 ]; then
-        echo -e "${YELLOW}Interrupted${RESET}"
-    elif tests_passed; then
-        echo -e "${GREEN}╔══════════════════════════════╗${RESET}"
-        echo -e "${GREEN}║      OH MY, YOU PASSED!      ║${RESET}"
-        echo -e "${GREEN}╚══════════════════════════════╝${RESET}"
+    step 🧹 Cleanup; clean_project; ok
+    [[ -f $FAIRY_STATS ]] && read -r total ko < <(awk '{p += $1; f += $2} END {print p + f, f + 0}' "$FAIRY_STATS")
+    rm -rf "$TMP"
+    secs=$(( ($(date +%s%N) - START) / 10000000 ))
+    printf -v secs '%d.%02ds' $((secs / 100)) $((secs % 100))
+    echo
+    if [[ $FAILED -eq 0 ]]; then
+        box "$GREEN" "OH MY, YOU PASSED!"
+        printf '   %s✔ %d tests passed in %s%s' "$GREEN" "$total" "$secs" "$RESET"
+        [[ $WARNED -eq 1 ]] && printf '  %s⚠ warnings above: not failures, worth a look%s' "$YELLOW" "$RESET"
     else
-        echo -e "${RED}╔══════════════════════════════╗${RESET}"
-        echo -e "${RED}║     OH NO... YOU FAILED!     ║${RESET}"
-        echo -e "${RED}╚══════════════════════════════╝${RESET}"
+        box "$RED" "OH NO... YOU FAILED!"
+        printf '   %s✘ %s' "$RED" "$FAILED_STEPS"
+        [[ $ko -gt 0 ]] && printf ' · %d/%d tests failed' "$ko" "$total"
+        printf ' · %s%s' "$secs" "$RESET"
+    fi
+    printf '\n\n'
+}
+trap finish EXIT
+trap 'exit 130' INT TERM
+
+# ---- background jobs ---------------------------------------------------------
+# job <name> <cmd...>: runs cmd in the background, at most JOBS at once. Its
+# output lands in $TMP/<name>.log, its exit status in $TMP/<name>.rc.
+job() {
+    local name=$1
+    shift
+    while [[ $(jobs -rp | wc -l) -ge $JOBS ]]; do wait -n; done
+    { "$@" > "$TMP/$name.log" 2>&1; echo $? > "$TMP/$name.rc"; } &
+    PIDS[$name]=$!
+}
+await() { local n; for n in "$@"; do wait "${PIDS[$n]}" 2> /dev/null; done; }
+rc() { cat "$TMP/$1.rc" 2> /dev/null || echo 1; }
+
+# ---- checks shared by the three subjects -------------------------------------
+in_git() { git rev-parse --is-inside-work-tree > /dev/null 2>&1; }
+
+# sources: the .c and .h files a grader gets. In a git repository that already
+# tracks some: the tracked ones (a local main.c is fine). Otherwise all.
+sources() {
+    local files=""
+    in_git && files=$(git ls-files -- '*.c' '*.h' | grep -v "^$TESTER/")
+    [[ -z $files ]] && files=$(find . -path "./$TESTER" -prune -o -type f \( -name '*.c' -o -name '*.h' \) -print | sed 's|^\./||' | sort)
+    [[ -n $files ]] && printf '%s\n' "$files"
+}
+
+# report_untracked <pathspecs...>: warns about the project files git would not
+# hand to the grader. Returns 1 when there is none.
+report_untracked() {
+    local files
+    files=$(in_git && git ls-files -o --exclude-standard -- "$@" | grep -v "^$TESTER/" | xargs)
+    [[ -z $files ]] && return 1
+    warn; say "not committed, hence not graded: $files"
+}
+
+# Norminette starts in the background at once: it is the slowest check.
+norm_start() { [[ -n $(sources) ]] && job norm norminette $(sources); }
+check_norm() {
+    step 📝 Norm
+    await norm
+    if ! command -v norminette > /dev/null; then
+        warn; say "norminette not found: the norm was NOT checked"
+    elif [[ -z $(sources) ]]; then
+        fail; say "no .c or .h file to check"
+    elif [[ $(rc norm) -eq 0 ]]; then
+        ok
+    else
+        fail
+        grep -Ev 'OK!$|^Setting locale' "$TMP/norm.log" \
+            | awk 'NR <= 20; END {if (NR > 20) print "… " NR - 20 " more lines"}' | quote
     fi
 }
 
-cleanup() {
-    echo ""
-    printf "🧹 Cleaning up..."
-    rm -rf "$TMP_DIR" $BASIC_TESTER_NAME $LEAK_TESTER_NAME \
-        $LISTS_BASIC_TESTER_NAME $LISTS_LEAK_TESTER_NAME .results
-    make -C $LIBFT_DIR fclean > /dev/null 2>&1
-    ok
-    echo ""
+# check_readme [topic]: README.md as the subjects describe it. A missing one
+# fails; its shape only warns, as a pattern cannot read prose.
+check_readme() {
+    local issues=() section
+    step 📖 README
+    if [[ ! -f README.md ]]; then
+        fail; say "no README.md at the root of the repository"; return
+    fi
+    head -n 1 README.md | grep -qE '^\s*(\*|_|<i>|<em>)This project has been created as part of the 42 curriculum by ' \
+        || issues+=("first line, in italics: *This project has been created as part of the 42 curriculum by <login>*")
+    for section in Description Instructions Res+ources; do
+        grep -qiE "^\s*(#+|[*_]{1,2}).*$section" README.md || issues+=("no \"${section/s+/s}\" section")
+    done
+    grep -qiE '\bAI\b|artificial intelligence|chatgpt|claude|copilot|gemini|LLM' README.md \
+        || issues+=("Resources: say how AI was used, for which tasks and parts")
+    [[ -n ${1:-} ]] && ! grep -qi "$1" README.md && issues+=("no explanation of the $1")
+    if [[ ${#issues[@]} -eq 0 ]]; then
+        ok
+    else
+        warn; for section in "${issues[@]}"; do say "$section"; done
+    fi
 }
 
-# INT/TERM only exit: the EXIT trap then prints the result and cleans up, once
-trap 'INTERRUPTED=1; exit 130' INT TERM
-trap 'print_result; cleanup' EXIT
+# emitted <symbol>: a call the compiler emits on its own (array initializer,
+# struct copy, stack protector), never written in the sources (comments aside)
+emitted() {
+    [[ -f $TMP/code ]] || sources | grep '\.c$' | xargs -r cat \
+        | { perl -0777 -pe 's{/\*.*?\*/}{ }gs; s{//[^\n]*}{}g' 2> /dev/null || cat; } > "$TMP/code"
+    [[ $1 =~ ^(memset|memcpy|memmove|__stack_chk_fail|_GLOBAL_OFFSET_TABLE_)$ ]] && ! grep -qw -- "$1" "$TMP/code"
+}
 
-# runs a test binary (under Valgrind when a log file is given), appends its output to .results
-run_tester() {
-    local tester=$1
-    local log=${2:-}
-    local cmd=("./$tester")
+# ---- test runs ---------------------------------------------------------------
+# tests <title> <binary>: a test binary prints the sections that did not pass
+# and exits 0, 1 (failure) or 2 (warnings). Anything else is reported here.
+tests() {
     local rc
-    [ -x "$tester" ] || return 0
-    [ -n "$log" ] && cmd=(valgrind --leak-check=full --show-leak-kinds=all \
-        --errors-for-leak-kinds=all --error-exitcode=1 --track-origins=yes --log-file="$log" "./$tester")
-    # the subshell keeps bash's own "Segmentation fault ... <command>" message out of the output
-    ( timeout "$TIMEOUT_SEC" "${cmd[@]}" > "$TMP_DIR/out.tmp" 2>&1; exit $? ) 2> /dev/null
+    (timeout --foreground 600 "$2" 2>&1) 2> /dev/null     # no "Segmentation fault" from bash
     rc=$?
-    cat "$TMP_DIR/out.tmp" >> .results
-    if [ $rc -eq 124 ]; then
-        echo -e "\n${YELLOW}$tester: timeout after ${TIMEOUT_SEC}s${RESET}" >> .results
-    elif [ $rc -gt 128 ]; then
-        echo -e "\n${RED}$tester: crashed (SIG$(kill -l $((rc - 128))))${RESET}" >> .results
+    [[ $rc -le 2 ]] && return $rc
+    section "$1"
+    if [[ $rc -eq 124 ]]; then say "timed out"; else say "crashed: SIG$(kill -l $((rc - 128)) 2> /dev/null)"; fi
+    if [[ -n ${LENIENT:-} ]]; then echo "1 0 1" >> "$FAIRY_STATS"; return 2; fi
+    echo "0 1 0" >> "$FAIRY_STATS"
+    return 1
+}
+
+# memcheck <title> <binary> [args...]: runs it under Valgrind, where VG_LEAKS
+# are the leak kinds that fail. Prints the report if it found something.
+memcheck() {
+    local log=$TMP/vg.$BASHPID rc note=""
+    if ! command -v valgrind > /dev/null; then
+        echo "1 0 1" >> "$FAIRY_STATS"
+        section "valgrind · $1"; say "valgrind not found: leaks NOT checked"
+        return 2
     fi
+    (timeout --foreground 30 valgrind --leak-check=full --show-leak-kinds=all \
+        --errors-for-leak-kinds="$VG_LEAKS" --error-exitcode=42 --track-origins=yes \
+        --log-file="$log" "${@:2}" > /dev/null 2>&1) 2> /dev/null
+    rc=$?
+    if [[ $rc -ne 0 ]] && grep -q "very large text, data or bss" "$log"; then
+        rc=2 note="Valgrind cannot load it (huge static data): leaks NOT checked"
+    elif [[ $rc -eq 0 ]] && grep -qE "(still reachable|possibly lost): [1-9]" "$log"; then
+        rc=2 note="memory still held at exit: not a leak for Valgrind, worth freeing"
+    elif [[ $rc -eq 124 ]]; then
+        rc=1 note="timed out"
+    elif [[ $rc -ne 0 && $rc -ne 42 ]]; then
+        note="crashed: SIG$(kill -l $((rc - 128)) 2> /dev/null)" rc=1
+    elif [[ $rc -eq 42 ]]; then
+        rc=1
+    fi
+    [[ $rc -eq 1 && -n ${LENIENT:-} ]] && rc=2
+    echo "$((rc != 1)) $((rc == 1)) $((rc == 2))" >> "$FAIRY_STATS"
+    [[ $rc -eq 0 && $VERBOSE -eq 0 ]] && return 0
+    section "valgrind · $1"
+    [[ -n $note ]] && say "$note"
+    # The report without its banner, pid prefixes and hints
+    sed -E 's/^==[0-9]+== ?//' "$log" | awk '
+        /^If you believe this happened/ {skip = 1} skip {skip = !/stack size used/; next}
+        /^(Memcheck,|Copyright|Using Valgrind|Command:|Parent PID:)/ || /rerun with/ {next}
+        /^$/ {if (!blank++ && shown) print; next} {blank = 0; shown = 1; print}' | quote
     return $rc
 }
 
-show_valgrind_log() {
-    local title=$1
-    local log=$2
-    local rc=$3
-    [ -f "$log" ] || return 0
-    [ "$rc" -ne 0 ] || [ $VERBOSE -eq 1 ] || return 0
-    {
-        echo ""
-        echo "════════════════════════════════════════"
-        echo "VALGRIND OUTPUT ($title)"
-        echo "════════════════════════════════════════"
-        cat "$log"
-    } >> .results
+# lenient <cmd...>: runs tests or memcheck where a failure only warns
+# (outside the subject, or debatable)
+lenient() { LENIENT=1 "$@"; }
+
+# queue <list> <name> <cmd...>: starts a run in the background, in a named
+# list. run_queue <list> waits for the list, closes the step with the worst
+# status and prints the reports in order.
+queue() { local list=$1; shift; eval "Q_$list+=(\"\$1\")"; job "$@"; }
+run_queue() {
+    local -n runs=Q_$1
+    local name worst=0 code
+    await "${runs[@]}"
+    for name in "${runs[@]}"; do
+        code=$(rc "$name")
+        if [[ $code -eq 2 ]]; then [[ $worst -eq 0 ]] && worst=2; elif [[ $code -ne 0 ]]; then worst=1; fi
+    done
+    case $worst in 0) ok ;; 2) warn ;; *) fail ;; esac
+    for name in "${runs[@]}"; do cat "$TMP/$name.log"; done
 }
 
-echo ""
-echo -e "${PINK}╔══════════════════════════════╗${RESET}"
-echo -e "${PINK}║        LIBFT-FAIRY 🧚        ║${RESET}"
-echo -e "${PINK}╚══════════════════════════════╝${RESET}"
-echo ""
+# ═══════════════════════════════ end of core ══════════════════════════════════
 
-printf "📝 Checking norm..."
-# the subject requires every file at the root of the repository
-NORM_OUTPUT=$(norminette "$LIBFT_DIR"/*.c "$LIBFT_DIR"/*.h 2>&1)
-if echo "$NORM_OUTPUT" | grep -q "Error"; then
-    NORM_TEST_RES=1
-    fail
-    echo ""
-    echo "$NORM_OUTPUT" | grep "Error"
-    echo ""
-else
-    ok
-fi
+NAME=libft.a
+VG_LEAKS=all            # no static state in a libft: any memory left is a leak
+clean_project() { make fclean > /dev/null 2>&1; }
 
-printf "📖 Checking README..."
-README="$LIBFT_DIR/README.md"
-README_ISSUES=""
-if [ ! -f "$README" ]; then
-    README_ISSUES+="No README.md at the root of the repository"$'\n'
-else
-    head -n 1 "$README" | grep -Eq '^[*_]+This project has been created as part of the 42 curriculum by .+[*_]+[[:space:]]*$' \
-        || README_ISSUES+="First line must be in italics: *This project has been created as part of the 42 curriculum by <login>.*"$'\n'
-    for section in Description Instructions Resources; do
-        grep -Eiq "^#+[[:space:]]*$section" "$README" || README_ISSUES+="Missing section: $section"$'\n'
-    done
-fi
-if [ -z "$README_ISSUES" ]; then
-    ok
-else
-    README_TEST_RES=1
-    fail
-    echo ""
-    printf '%s\n' "$README_ISSUES"
-fi
-
-printf "📑 Checking prototypes..."
 PROTOTYPES='int ft_isalpha(int c);
 int ft_isdigit(int c);
 int ft_isalnum(int c);
@@ -219,168 +303,152 @@ void ft_lstdelone(t_list *lst, void (*del)(void *));
 void ft_lstclear(t_list **lst, void (*del)(void *));
 void ft_lstiter(t_list *lst, void (*f)(void *));
 t_list *ft_lstmap(t_list *lst, void *(*f)(void *), void (*del)(void *));'
-PROTO_ISSUES=""
-grep -qw restrict "$LIBFT_DIR/libft.h" && PROTO_ISSUES+="The 'restrict' qualifier is forbidden"$'\n'
-# The compiler checks the types (parameter names and spacing don't matter):
-# a missing prototype is an undeclared identifier, a wrong one has conflicting types.
+FUNCTIONS=$(grep -oE 'ft_[a-z_]+\(' <<< "$PROTOTYPES" | tr -d '(')
+
+echo; box "$PINK" "LIBFT-FAIRY" 🧚; echo
+norm_start
+
+# Makefile, libft.h and ft_*.c, all at the root, and no unused file
+step 📂 Files
+CMDS=$(make -nB 2> /dev/null)
+issues=()
+for f in Makefile libft.h; do [[ -f $f ]] || issues+=("missing at the root: $f"); done
+for f in $(sources); do
+    if [[ $f != libft.h && ! $f =~ ^ft_[^/]*\.c$ ]]; then
+        issues+=("not in the turn-in list (Makefile, libft.h, ft_*.c at the root): $f")
+    elif [[ $f == *.c ]] && ! grep -qw -- "$f" <<< "$CMDS"; then
+        issues+=("not compiled by make, and unused files are forbidden: $f")
+    fi
+done
+if [[ ${#issues[@]} -gt 0 ]]; then verdict "${issues[@]}"
+elif ! report_untracked Makefile README.md libft.h $(sources | grep '\.c$'); then ok; fi
+[[ -f Makefile && -f libft.h ]] || exit 1
+
+check_readme
+check_norm
+
+# The compiler checks every prototype against the subject (names and spacing
+# aside): a missing one is undeclared, a different one a conflicting type
+step 📋 Prototypes
+issues=()
+grep -qw restrict libft.h && issues+=("the restrict qualifier is forbidden")
 {
     echo '#include "libft.h"'
     echo 'void libft_fairy_uses(void) {'
-    grep -oE 'ft_[a-z_]+\(' <<< "$PROTOTYPES" | sed 's/^/(void)/; s/($/;/'
+    sed 's/^/(void)/; s/$/;/' <<< "$FUNCTIONS"
     echo '}'
     echo "$PROTOTYPES"
-} > "$TMP_DIR/prototypes.c"
-if ! PROTO_LOG=$(gcc -fsyntax-only -I"$LIBFT_DIR" "$TMP_DIR/prototypes.c" 2>&1); then
-    PROTO_FUNCS=$(grep 'error:' <<< "$PROTO_LOG" | sed 's/.*error: //' | grep -oE 'ft_[a-z_]+' | sort -u)
-    if [ -z "$PROTO_FUNCS" ]; then
-        PROTO_ISSUES+="$PROTO_LOG"$'\n'
-    else
-        PROTO_ISSUES+="Missing or mismatching prototype(s), expected:"$'\n'
-        for func in $PROTO_FUNCS; do
-            PROTO_ISSUES+="$(grep -E "\b$func\(" <<< "$PROTOTYPES")"$'\n'
-        done
-    fi
-fi
-if [ -z "$PROTO_ISSUES" ]; then
-    ok
-else
-    PROTO_TEST_RES=1
-    fail
-    echo ""
-    printf '%s\n' "$PROTO_ISSUES"
-fi
-
-printf "🔧 Checking Makefile..."
-MAKE_ISSUES=""
-for rule in all clean fclean re; do
-    grep -Eq "^$rule\s*:" "$MAKEFILE_PATH" || MAKE_ISSUES+="Missing rule: $rule"$'\n'
-done
-grep -Eq '^\$(\(NAME\)|\{NAME\})\s*:' "$MAKEFILE_PATH" || MAKE_ISSUES+="Missing rule: \$(NAME)"$'\n'
-grep -v '^\s*#' "$MAKEFILE_PATH" | grep -q '\*\.c' && MAKE_ISSUES+="Forbidden wildcard inclusion detected (*.c)"$'\n'
-# compilation commands as make would run them, with every variable expanded
-COMPILE_CMDS=$(make -nB -C "$LIBFT_DIR" --no-print-directory 2>/dev/null | grep -E '(^|\s)-c(\s|$)')
-if [ -z "$COMPILE_CMDS" ]; then
-    MAKE_ISSUES+="No compilation command found with 'make -n'"$'\n'
-else
-    grep -vqE '(^|[;&|/[:space:]])cc\s' <<< "$COMPILE_CMDS" && MAKE_ISSUES+="Sources must be compiled with cc"$'\n'
-    for flag in -Wall -Wextra -Werror; do
-        grep -vq -- "$flag" <<< "$COMPILE_CMDS" && MAKE_ISSUES+="Missing compilation flag: $flag"$'\n'
+} > "$TMP/prototypes.c"
+if ! cc -fsyntax-only -I. "$TMP/prototypes.c" 2> "$TMP/proto.err"; then
+    for f in $(grep 'error:' "$TMP/proto.err" | grep -oE 'ft_[a-z_]+' | sort -u); do
+        issues+=("expected: $(grep -E "\b$f\(" <<< "$PROTOTYPES")")
     done
-    grep -q -- '-std=c99' <<< "$COMPILE_CMDS" && MAKE_ISSUES+="Forbidden flag: -std=c99"$'\n'
+    [[ ${#issues[@]} -eq 0 ]] && issues+=("libft.h does not compile: $(grep -m 1 'error' "$TMP/proto.err")")
 fi
-# nanosecond timestamps: a relink happens in the same second as the previous build
-make -C "$LIBFT_DIR" > /dev/null 2>&1
-LIB_TIME=$(stat -c %y "$LIBFT_A" 2>/dev/null)
-make -C "$LIBFT_DIR" > /dev/null 2>&1
-[ "$(stat -c %y "$LIBFT_A" 2>/dev/null)" != "$LIB_TIME" ] \
-    && MAKE_ISSUES+="Unnecessary relink detected when running make twice"$'\n'
-[ -f "$LIBFT_A" ] || MAKE_ISSUES+="make does not create libft.a at the root of the repository"$'\n'
-if [ -z "$MAKE_ISSUES" ]; then
-    ok
-else
-    MAKE_ERRORS=1
-    fail
-    echo ""
-    printf '%s\n' "$MAKE_ISSUES"
-fi
+verdict "${issues[@]}"
 
-printf "📦 Building libft..."
-# subject v19.3 has no bonus part: make alone must build Part 1, 2 and 3
-if MAKE_OUTPUT=$(make -C "$LIBFT_DIR" 2>&1); then
-    ok
+# Rules and flags as make really runs them (make -n), variables expanded
+step 🔧 Makefile
+rule() { grep -qE "^([^#:=]+[[:space:]])?($1)([[:space:]][^#:=]*)?[[:space:]]*:([^=]|$)" Makefile; }
+issues=()
+rule '\$[({]NAME[)}]|libft\.a' || issues+=("no \$(NAME) rule")
+for r in all clean fclean re; do rule "$r" || issues+=("no '$r' rule"); done
+grep -vE '^\s*#' Makefile | grep -qE '\$\((wildcard|shell)|^[^#[:space:]][^#]*=[^#]*\*\.c' \
+    && issues+=("sources listed with a wildcard: name each file")
+COMPILES=$(grep -E '(^|\s)-c(\s|$)' <<< "$CMDS")
+if [[ -z $COMPILES ]]; then
+    issues+=("make -n shows no compilation")
 else
-    BUILD_FAIL=1
-    fail
-    echo ""
-    printf '%s\n\n' "$MAKE_OUTPUT"
+    grep -vqE '(^|[;&|/[:space:]])cc\s' <<< "$COMPILES" && issues+=("sources not compiled with cc")
+    for flag in -Wall -Wextra -Werror; do
+        grep -vq -- "$flag" <<< "$COMPILES" && issues+=("sources compiled without $flag")
+    done
+    grep -q -- '-std=c99' <<< "$COMPILES" && issues+=("-std=c99 is forbidden")
+fi
+grep -qE '(^|[;&|/[:space:]])libtool\s' <<< "$CMDS" && issues+=("libtool is forbidden")
+grep -qE '(^|[;&|/[:space:]])ar\s' <<< "$CMDS" || issues+=("$NAME not created with ar")
+verdict "${issues[@]}"
+
+# A build from scratch (in parallel; sequential if that fails, as some valid
+# Makefiles do not support -j), then make again, which must not relink
+step 📦 Build
+make fclean > /dev/null 2>&1
+if ! { make -j"$JOBS" > /dev/null 2>&1 && [[ -f $NAME ]]; } \
+    && ! { make fclean > /dev/null 2>&1; make > "$TMP/make.log" 2>&1 && [[ -f $NAME ]]; }; then
+    fail; tail -n 15 "$TMP/make.log" | quote
+    [[ -f $NAME ]] || say "make did not create $NAME at the root"
     exit 1
 fi
+STAMP=$(stat -c %y "$NAME")
+make > /dev/null 2>&1
+if [[ $(stat -c %y "$NAME") == "$STAMP" ]]; then ok; else fail; say "relinks: a second 'make' rebuilds $NAME"; fi
 
-printf "🔍 Checking symbols..."
-# external functions each libft function may call, all others are forbidden
+# Every object of the archive, wherever it was built and whatever functions it
+# holds: the external functions each ft_ function may call, no global
+# variable, no helper left non-static, every function of the subject built
+step 🔍 Symbols
 ALLOWED="ft_calloc:malloc ft_strdup:malloc ft_substr:malloc ft_strjoin:malloc ft_strtrim:malloc
 ft_split:malloc,free ft_itoa:malloc ft_strmapi:malloc ft_putchar_fd:write ft_putstr_fd:write
 ft_putendl_fd:write ft_putnbr_fd:write ft_lstnew:malloc ft_lstdelone:free ft_lstclear:free ft_lstmap:malloc,free"
-# One pass over every object of the archive, wherever the .o files were built
-# and whatever functions each of them holds
-SYMBOLS_OUTPUT=$(nm -A "$LIBFT_A" 2>/dev/null | awk -v allowed="$ALLOWED" '
-    BEGIN { n = split(allowed, pairs); for (i = 1; i <= n; i++) { split(pairs[i], kv, ":"); ok[kv[1]] = kv[2] } }
+issues=() extras=()
+while IFS='|' read -r kind obj sym; do
+    [[ $kind == "forbidden function" ]] && emitted "$sym" && continue
+    [[ $sym == __ctype* ]] && sym+=" (a <ctype.h> macro)"
+    if [[ $kind == extra ]]; then extras+=("$obj: $sym is not in the subject: static, if it is a helper"); continue; fi
+    issues+=("$obj: $kind: $sym")
+done < <(nm -A "$NAME" 2> /dev/null | awk -v allowed="$ALLOWED" -v subject="$(xargs <<< "$FUNCTIONS")" '
+    BEGIN {
+        n = split(allowed, pairs); for (i = 1; i <= n; i++) { split(pairs[i], kv, ":"); can[kv[1]] = kv[2] }
+        n = split(subject, f); for (i = 1; i <= n; i++) in_subject[f[i]] = 1
+    }
     { split($1, path, ":"); obj = path[2]; type = $(NF - 1); sym = $NF }
-    type == "T" && sym ~ /^ft_/ { allowed_in[obj] = allowed_in[obj] "," ok[sym]; next }
-    type == "T" { print obj ": non-static function: " sym }
-    type ~ /^[BCDGR]$/ { print obj ": global variable: " sym }
-    type == "U" && sym !~ /^(ft_|__stack_chk_|_GLOBAL_OFFSET_TABLE_$)/ { calls[obj] = calls[obj] " " sym }
+    type == "T" && sym in in_subject { allowed_in[obj] = allowed_in[obj] "," can[sym]; next }
+    type == "T" && sym ~ /^ft_/ { print "extra|" obj "|" sym; next }
+    type == "T" { print "non-static helper|" obj "|" sym }
+    type ~ /^[BCDGR]$/ { print "global variable|" obj "|" sym }
+    type == "U" && sym !~ /^ft_/ { calls[obj] = calls[obj] " " sym }
     END {
         for (obj in calls) {
             n = split(calls[obj], c)
             for (i = 1; i <= n; i++)
                 if (index(allowed_in[obj] ",", "," c[i] ",") == 0)
-                    print obj ": forbidden function: " c[i] (c[i] ~ /^__ctype/ ? " (<ctype.h> macro)" : "")
+                    print "forbidden function|" obj "|" c[i]
         }
-    }')
-DEFINED=$(nm -g --defined-only "$LIBFT_A" 2>/dev/null | awk '{ print $NF }')
-for func in $(grep -oE 'ft_[a-z_]+' <<< "$PROTOTYPES"); do
-    grep -qx "$func" <<< "$DEFINED" || SYMBOLS_OUTPUT+="${SYMBOLS_OUTPUT:+$'\n'}libft.a: function not built by make: $func"
+    }' | sort)
+DEFINED=$(nm -g --defined-only "$NAME" 2> /dev/null | awk '{print $NF}')
+for f in $FUNCTIONS; do
+    grep -qx "$f" <<< "$DEFINED" || issues+=("$f is not in $NAME")
 done
-if [ -z "$SYMBOLS_OUTPUT" ]; then
-    ok
-else
-    EXTERN_TEST_RES=1
-    fail
-    echo ""
-    printf '%s\n\n' "$SYMBOLS_OUTPUT"
-fi
+if [[ ${#issues[@]} -gt 0 ]]; then verdict "${issues[@]}"
+elif [[ ${#extras[@]} -gt 0 ]]; then warn
+else ok; fi
+for e in "${extras[@]}"; do say "$e"; done
 
-printf "🔨 Building tests..."
-VERBOSE_FLAG=""
-[ $VERBOSE -eq 1 ] && VERBOSE_FLAG="-DVERBOSE=1"
-COMPILE_FLAGS="-Wall -Wextra -Werror -Wno-missing-field-initializers -no-pie $VERBOSE_FLAG -Wl,--wrap=malloc"
-BUILD_ERRORS=""
-compile_test() {
-    local src_file=$1
-    local output_file=$2
-    local compile_output
-    rm -f "$output_file"
-    if ! compile_output=$(gcc $COMPILE_FLAGS "$src_file" utils.c -L$LIBFT_DIR -lft -I$LIBFT_DIR -o "$output_file" 2>&1); then
-        BUILD_ERRORS+="$src_file compilation failed:"$'\n'"$(head -n 15 <<< "$compile_output")"$'\n'
-        return 1
-    fi
-    return 0
-}
-# a test file that does not compile is reported and skipped, the others still run
-compile_test basic_tests.c "$BASIC_TESTER_NAME" || BUILD_FAIL=1
-compile_test leak_tests.c "$LEAK_TESTER_NAME" || BUILD_FAIL=1
-compile_test basic_tests_lists.c "$LISTS_BASIC_TESTER_NAME" || BUILD_FAIL=1
-compile_test leak_tests_lists.c "$LISTS_LEAK_TESTER_NAME" || BUILD_FAIL=1
-if [ $BUILD_FAIL -eq 0 ]; then
-    ok
-else
-    fail
-    echo ""
-    printf '%s\n' "$BUILD_ERRORS"
-fi
+# The sources again, with -g, so that Valgrind reports point to their lines
+# (libft.a if that fails), then every test file; all in parallel
+step 🔨 "Test build"
+mkdir "$TMP/obj"
+for src in $(sources | grep '\.c$'); do job "g_$src" cc -g -I. -c "$src" -o "$TMP/obj/${src%.c}.o"; done
+await $(sources | grep '\.c$' | sed 's/^/g_/')
+LIB=("$TMP"/obj/*.o)
+for src in $(sources | grep '\.c$'); do [[ $(rc "g_$src") -eq 0 ]] || LIB=(-L. -lft); done
+TESTS="basic_tests basic_tests_lists leak_tests"
+for t in $TESTS; do
+    job "cc_$t" cc -g -Wall -Wextra -Wno-missing-field-initializers -DVERBOSE=$VERBOSE -I. -no-pie \
+        "$TESTER/$t.c" "$TESTER/utils.c" "${LIB[@]}" -o "$TMP/$t" -Wl,--wrap=malloc
+done
+errors=""
+for t in $TESTS; do
+    await "cc_$t"
+    [[ $(rc "cc_$t") -eq 0 ]] || errors+="$t.c:"$'\n'"$(head -n 12 "$TMP/cc_$t.log")"$'\n'
+done
+if [[ -z $errors ]]; then ok; else fail; printf '%s' "$errors" | quote; exit 1; fi
 
-printf "🧪 Running tests..."
-: > .results
-run_tester "$BASIC_TESTER_NAME"
-BASIC_TESTS_RES=$?
-run_tester "$LISTS_BASIC_TESTER_NAME"
-LISTS_BASIC_TESTS_RES=$?
-run_tester "$LEAK_TESTER_NAME" "$TMP_DIR/valgrind_output.log"
-LEAK_TESTS_RES=$?
-run_tester "$LISTS_LEAK_TESTER_NAME" "$TMP_DIR/lists_valgrind_output.log"
-LISTS_LEAK_TESTS_RES=$?
-show_valgrind_log "Part 1 & 2" "$TMP_DIR/valgrind_output.log" $LEAK_TESTS_RES
-show_valgrind_log "Part 3, linked lists" "$TMP_DIR/lists_valgrind_output.log" $LISTS_LEAK_TESTS_RES
-if [ $BASIC_TESTS_RES -eq 124 ] || [ $LISTS_BASIC_TESTS_RES -eq 124 ] \
-    || [ $LEAK_TESTS_RES -eq 124 ] || [ $LISTS_LEAK_TESTS_RES -eq 124 ]; then
-    timeout_
-elif tests_ran_ok; then
-    ok
-else
-    fail
-fi
-cat .results
+queue main basic tests "basic_tests" "$TMP/basic_tests"
+queue main lists tests "basic_tests_lists" "$TMP/basic_tests_lists"
+queue main leak memcheck "leak_tests" "$TMP/leak_tests"
+queue main lstmap lenient memcheck "ft_lstmap: f's content on failure (warning)" "$TMP/leak_tests" lstmap
 
-tests_passed
-exit $?
+step 🧪 Tests
+run_queue main
+exit $FAILED

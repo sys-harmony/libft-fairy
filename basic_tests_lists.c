@@ -1,461 +1,226 @@
 #include "libft_fairy.h"
-#include <stdlib.h>
 
-static int	g_freed_count;
+/*
+ * Part 3. An empty list is a NULL t_list *: a valid list, which every
+ * function must take. A NULL t_list ** or a NULL function is undefined
+ * behaviour: crashing there only warns.
+ */
 
-static void	free_count(void *content) {
+static int	g_calls;
+static int	g_seen[8];
+
+static void	count_del(void *content) {
 	free(content);
-	g_freed_count++;
+	g_calls++;
+}
+
+/* Records the order in which f sees the contents. */
+static void	record(void *content) {
+	g_seen[g_calls++ % 8] = *(int *)content;
+}
+
+static void	*double_it(void *content) {
+	int	*n = malloc(sizeof(int));
+
+	if (n)
+		*n = *(int *)content * 2;
+	return n;
+}
+
+static void	*same(void *content) {
+	return content;
+}
+
+static void	nothing(void *content) {
+	(void)content;
+}
+
+static t_list	*node(void *content) {
+	t_list	*n = xmalloc(sizeof(t_list));
+
+	n->content = content;
+	n->next = NULL;
+	return n;
 }
 
 /* ************************************************************************** */
-/*                             ft_lstnew tests                                */
+/*                                building                                    */
 /* ************************************************************************** */
 
-static void	ft_lstnew_basic_test(void) {
-	int		content = 42;
-	t_list	*node = ft_lstnew(&content);
+static void	lstnew_test(void) {
+	int		x;
+	t_list	*a = ft_lstnew(&x);
+	t_list	*b = ft_lstnew(NULL);
 
-	if (!node || node->content != &content || node->next)
-		abort();
+	EXPECT(a && a->content == &x && !a->next, "ft_lstnew(&x): content or next is wrong");
+	EXPECT(b && !b->content && !b->next, "ft_lstnew(NULL): content or next is wrong");
+	EXPECT(alloc_size(a) >= sizeof(t_list), "ft_lstnew: %zu bytes malloc'd for a t_list of %zu",
+		alloc_size(a), sizeof(t_list));
+	EACH_MALLOC_FAILING(ft_lstnew(&x));
 }
 
-static void	ft_lstnew_null_content_test(void) {
-	t_list	*node = ft_lstnew(NULL);
-
-	if (!node || node->content || node->next)
-		abort();
-}
-
-static void	test_ft_lstnew(void) {
-	const t_test	tests[] = {
-		{"basic", ft_lstnew_basic_test},
-		{"with NULL content", ft_lstnew_null_content_test}
-	};
-
-	run_tests("ft_lstnew", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                           ft_lstadd_front tests                            */
-/* ************************************************************************** */
-
-static void	ft_lstadd_front_basic_test(void) {
-	int		c1 = 1, c2 = 2;
-	t_list	*n1 = xmalloc(sizeof(t_list));
-	t_list	*n2 = xmalloc(sizeof(t_list));
-	t_list	*lst = n1;
-
-	n1->content = &c1;
-	n1->next = NULL;
-	n2->content = &c2;
-	n2->next = NULL;
-	ft_lstadd_front(&lst, n2);
-	if (lst != n2 || *(int *)lst->content != 2 || *(int *)lst->next->content != 1)
-		abort();
-}
-
-static void	ft_lstadd_front_empty_list_test(void) {
-	int		content = 1;
-	t_list	*empty = NULL;
-	t_list	*node = xmalloc(sizeof(t_list));
-
-	node->content = &content;
-	node->next = NULL;
-	ft_lstadd_front(&empty, node);
-	if (empty != node || empty->next)
-		abort();
-}
-
-static void	ft_lstadd_front_null_list_test(void) {
-	t_list	*node = xmalloc(sizeof(t_list));
-
-	node->content = &(int){42};
-	node->next = NULL;
-	ft_lstadd_front(NULL, node);
-	free(node);
-}
-
-static void	ft_lstadd_front_null_new_test(void) {
+static void	lstadd_front_test(void) {
 	t_list	*lst = NULL;
+	t_list	*a = node(NULL);
+	t_list	*b = node(NULL);
+
+	ft_lstadd_front(&lst, a);
+	EXPECT(lst == a && !a->next, "ft_lstadd_front on an empty list: the list is not the new node alone");
+	ft_lstadd_front(&lst, b);
+	EXPECT(lst == b && b->next == a && !a->next, "ft_lstadd_front: the new node is not first, followed by the list");
+}
+
+static void	lstadd_back_test(void) {
+	t_list	*lst = NULL;
+	t_list	*a = node(NULL);
+	t_list	*b = node(NULL);
+	t_list	*c = node(NULL);
+
+	ft_lstadd_back(&lst, a);
+	EXPECT(lst == a && !a->next, "ft_lstadd_back on an empty list: the list is not the new node alone");
+	ft_lstadd_back(&lst, b);
+	ft_lstadd_back(&lst, c);
+	EXPECT(lst == a && a->next == b && b->next == c && !c->next, "ft_lstadd_back: nodes not in the order added");
+}
+
+static void	lstsize_last_test(void) {
+	t_list	*lst = make_list(5);
+
+	EXPECT(ft_lstsize(NULL) == 0, "ft_lstsize(NULL): got %u, expected 0", ft_lstsize(NULL));
+	EXPECT(ft_lstsize(lst) == 5, "ft_lstsize: got %u, expected 5", ft_lstsize(lst));
+	EXPECT(ft_lstsize(lst->next->next->next->next) == 1, "ft_lstsize of a single node: got %u",
+		ft_lstsize(lst->next->next->next->next));
+	EXPECT(!ft_lstlast(NULL), "ft_lstlast(NULL): expected NULL");
+	EXPECT(ft_lstlast(lst) == lst->next->next->next->next, "ft_lstlast: not the last node");
+	EXPECT(ft_lstlast(lst->next->next->next->next) == lst->next->next->next->next,
+		"ft_lstlast of a single node: not that node");
+}
+
+static void	add_null_list_test(void) {
+	ft_lstadd_front(NULL, node(NULL));
+	ft_lstadd_back(NULL, node(NULL));
+}
+
+static void	add_null_node_test(void) {
+	t_list	*lst = make_list(2);
 
 	ft_lstadd_front(&lst, NULL);
-}
-
-static void	ft_lstadd_front_null_both_test(void) {
-	ft_lstadd_front(NULL, NULL);
-}
-
-static void	test_ft_lstadd_front(void) {
-	const t_test	tests[] = {
-		{"basic", ft_lstadd_front_basic_test},
-		{"add to empty list", ft_lstadd_front_empty_list_test},
-		{"NULL list", ft_lstadd_front_null_list_test},
-		{"NULL new", ft_lstadd_front_null_new_test},
-		{"NULL both", ft_lstadd_front_null_both_test}
-	};
-
-	run_tests("ft_lstadd_front", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                              ft_lstsize tests                              */
-/* ************************************************************************** */
-
-static void	ft_lstsize_basic_test(void) {
-	t_list	*lst = create_test_list(1, 2, 3, 0);
-
-	if (ft_lstsize(lst) != 3)
-		abort();
-}
-
-static void	ft_lstsize_null_test(void) {
-	if (ft_lstsize(NULL) != 0)
-		abort();
-}
-
-static void	test_ft_lstsize(void) {
-	const t_test	tests[] = {
-		{"basic", ft_lstsize_basic_test},
-		{"NULL (empty list)", ft_lstsize_null_test}
-	};
-
-	run_tests("ft_lstsize", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                              ft_lstlast tests                              */
-/* ************************************************************************** */
-
-static void ft_lstlast_basic_test(void) {
-	t_list	*lst = create_test_list(1, 2, 3, 0);
-
-	if (ft_lstlast(lst) != lst->next->next)
-		abort();
-}
-
-static void ft_lstlast_null_test(void) {
-	if (ft_lstlast(NULL))
-		abort();
-}
-
-static void	test_ft_lstlast(void) {
-	const t_test	tests[] = {
-		{"basic", ft_lstlast_basic_test},
-		{"NULL (empty list)", ft_lstlast_null_test}
-	};
-
-	run_tests("ft_lstlast", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_lstadd_back tests                            */
-/* ************************************************************************** */
-
-static void	ft_lstadd_back_basic_test(void) {
-	t_list	*lst = create_test_list(1, 2, 3, 0);
-	t_list	*new = xmalloc(sizeof(t_list));
-
-	new->content = &(int){4};
-	new->next = NULL;
-	ft_lstadd_back(&lst, new);
-	if (lst->next->next->next != new || new->next || *(int *)lst->content != 1)
-		abort();
-}
-
-static void	ft_lstadd_back_empty_list_test(void) {
-	int		content = 1;
-	t_list	*empty = NULL;
-	t_list	*node = xmalloc(sizeof(t_list));
-
-	node->content = &content;
-	node->next = NULL;
-	ft_lstadd_back(&empty, node);
-	if (empty != node || empty->next)
-		abort();
-}
-
-static void	ft_lstadd_back_null_list_test(void) {
-	t_list	*node = xmalloc(sizeof(t_list));
-
-	node->content = &(int){42};
-	node->next = NULL;
-	ft_lstadd_back(NULL, node);
-	free(node);
-}
-
-static void	ft_lstadd_back_null_new_test(void) {
-	t_list	*lst = NULL;
-
 	ft_lstadd_back(&lst, NULL);
 }
 
-static void	ft_lstadd_back_null_both_test(void) {
-	ft_lstadd_back(NULL, NULL);
-}
-
-static void	test_ft_lstadd_back(void) {
-	const t_test	tests[] = {
-		{"basic (3 nodes)", ft_lstadd_back_basic_test},
-		{"add to empty list", ft_lstadd_back_empty_list_test},
-		{"NULL list", ft_lstadd_back_null_list_test},
-		{"NULL new", ft_lstadd_back_null_new_test},
-		{"NULL both", ft_lstadd_back_null_both_test}
-	};
-
-	run_tests("ft_lstadd_back", tests, ARRAY_SIZE(tests));
-}
+static const t_test	g_build_tests[] = {
+	{"ft_lstnew: content, next, malloc failing", lstnew_test},
+	{"ft_lstadd_front: empty list, then in front", lstadd_front_test},
+	{"ft_lstadd_back: empty list, then in order", lstadd_back_test},
+	{"ft_lstsize, ft_lstlast: empty, one, five nodes", lstsize_last_test},
+	{"ft_lstadd_front, ft_lstadd_back (NULL, node)", add_null_list_test, UB_SAFE},
+	{"ft_lstadd_front, ft_lstadd_back (&lst, NULL)", add_null_node_test, UB_SAFE},
+};
 
 /* ************************************************************************** */
-/*                             ft_lstdelone tests                             */
+/*                                 freeing                                    */
 /* ************************************************************************** */
 
-static void	ft_lstdelone_free_once_test(void) {
-	t_list *lst = create_test_list(1, 2, 3, 0);
-	t_list *to_del = lst->next;
+static void	lstdelone_test(void) {
+	t_list	*lst = make_list(3);
+	t_list	*second = lst->next;
 
-	lst->next = lst->next->next;
-	g_freed_count = 0;
-	ft_lstdelone(to_del, free_count);
-	if (g_freed_count != 1)
-		abort();
+	lst->next = second->next;
+	g_calls = 0;
+	ft_lstdelone(second, count_del);
+	EXPECT(g_calls == 1, "ft_lstdelone: del called %d times, expected once", g_calls);
+	EXPECT(*(int *)lst->content == 1 && *(int *)lst->next->content == 3 && !lst->next->next,
+		"ft_lstdelone: the other nodes changed");
 }
 
-static void	ft_lstdelone_remaining_nodes_test(void) {
-	t_list *lst = create_test_list(1, 2, 3, 0);
-	t_list *to_del = lst->next;
+static void	lstclear_test(void) {
+	t_list	*lst = make_list(4);
+	t_list	*empty = NULL;
 
-	lst->next = lst->next->next;
-	ft_lstdelone(to_del, free);
-	if ((*(int *)lst->content != 1) || (*(int *)lst->next->content != 3) || lst->next->next)
-		abort();
+	g_calls = 0;
+	ft_lstclear(&lst, count_del);
+	EXPECT(!lst, "ft_lstclear: the list pointer is not set to NULL");
+	EXPECT(g_calls == 4, "ft_lstclear on 4 nodes: del called %d times", g_calls);
+	ft_lstclear(&empty, count_del);
+	EXPECT(!empty && g_calls == 4, "ft_lstclear on an empty list: del called");
 }
 
-static void	ft_lstdelone_null_node_test(void) {
+static void	free_null_test(void) {
 	ft_lstdelone(NULL, free);
-}
-
-static void	ft_lstdelone_null_func_test(void) {
-	t_list *lst = create_test_list(1, 2, 3, 0);
-
-	ft_lstdelone(lst, NULL);
-	while (lst)
-	{
-		t_list *tmp = lst->next;
-		free(lst->content);
-		free(lst);
-		lst = tmp;
-	}
-}
-
-static void	ft_lstdelone_null_both_test(void) {
-	ft_lstdelone(NULL, NULL);
-}
-
-static void	test_ft_lstdelone(void)
-{
-	const t_test	tests[] = {
-		{"free once", ft_lstdelone_free_once_test},
-		{"correct remaining nodes", ft_lstdelone_remaining_nodes_test},
-		{"NULL node", ft_lstdelone_null_node_test},
-		{"NULL function", ft_lstdelone_null_func_test},
-		{"NULL both", ft_lstdelone_null_both_test}
-	};
-
-	run_tests("ft_lstdelone", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                             ft_lstclear tests                              */
-/* ************************************************************************** */
-
-static void	ft_lstclear_basic_test(void) {
-	t_list	*lst = create_test_list(1, 2, 3, 0);
-
-	g_freed_count = 0;
-	ft_lstclear(&lst, free_count);
-	if (lst || g_freed_count != 3)
-		abort();
-}
-
-static int	g_del_no_free_count;
-
-static void	del_no_free(void *content) {
-	if (content)
-	{
-		int *val = (int *)content;
-		*val = 0;
-		g_del_no_free_count++;
-	}
-}
-
-static void	ft_lstclear_del_no_free_test(void) {
-	t_list	*lst = create_test_list(42, 21, 84, 0);
-	int		*c1 = lst->content;
-	int		*c2 = lst->next->content;
-	int		*c3 = lst->next->next->content;
-
-	g_del_no_free_count = 0;
-	ft_lstclear(&lst, del_no_free);
-	if (g_del_no_free_count != 3 || *c1 || *c2 || *c3)
-	    abort();
-	free(c1);
-	free(c2);
-	free(c3);
-}
-
-static void	ft_lstclear_null_list_test(void) {
 	ft_lstclear(NULL, free);
 }
 
-static void	ft_lstclear_null_func_test(void) {
-	t_list	*lst = create_test_list(1, 2, 3, 0);
+static void	free_null_del_test(void) {
+	t_list	*lst = make_list(2);
 
+	ft_lstdelone(lst->next, NULL);
+	lst->next = NULL;
 	ft_lstclear(&lst, NULL);
-	while (lst)
-	{
-		t_list *tmp = lst->next;
-		free(lst->content);
-		free(lst);
-		lst = tmp;
+}
+
+static const t_test	g_free_tests[] = {
+	{"ft_lstdelone: del once, the rest untouched", lstdelone_test},
+	{"ft_lstclear: del on each node, list set to NULL", lstclear_test},
+	{"ft_lstdelone, ft_lstclear (NULL, free)", free_null_test, UB_SAFE},
+	{"ft_lstdelone, ft_lstclear with del NULL", free_null_del_test, UB_SAFE},
+};
+
+/* ************************************************************************** */
+/*                                iterating                                   */
+/* ************************************************************************** */
+
+static void	lstiter_test(void) {
+	t_list	*lst = make_list(5);
+
+	g_calls = 0;
+	ft_lstiter(lst, record);
+	EXPECT(g_calls == 5, "ft_lstiter on 5 nodes: f called %d times", g_calls);
+	for (int i = 0; i < 5; i++)
+		EXPECT(g_seen[i] == i + 1, "ft_lstiter: call %d got content %d, expected %d", i + 1, g_seen[i], i + 1);
+	ft_lstiter(NULL, record);
+	EXPECT(g_calls == 5, "ft_lstiter on an empty list: f called");
+}
+
+static void	lstmap_test(void) {
+	t_list	*lst = make_list(4);
+	t_list	*map = ft_lstmap(lst, double_it, free);
+	t_list	*m = map;
+
+	for (int i = 1; i <= 4; i++, m = m->next) {
+		EXPECT(m, "ft_lstmap on 4 nodes: %d nodes", i - 1);
+		EXPECT(*(int *)m->content == 2 * i, "ft_lstmap(f: n * 2): node %d holds %d, expected %d", i,
+			*(int *)m->content, 2 * i);
+		EXPECT(*(int *)lst->content == i, "ft_lstmap: the source list changed");
+		lst = lst->next;
 	}
+	EXPECT(!m, "ft_lstmap on 4 nodes: more than 4 nodes");
+	EXPECT(!ft_lstmap(NULL, double_it, free), "ft_lstmap on an empty list: expected NULL");
 }
 
-static void	ft_lstclear_null_both_test(void) {
-	ft_lstclear(NULL, NULL);
+/* f allocates nothing, so every malloc is a node: one failing gives NULL. */
+static void	lstmap_fail_test(void) {
+	t_list	*lst = make_list(3);
+
+	EACH_MALLOC_FAILING(ft_lstmap(lst, same, nothing));
 }
 
-static void	test_ft_lstclear(void) {
-	const t_test	tests[] = {
-		{"basic", ft_lstclear_basic_test},
-		{"content freed by del only", ft_lstclear_del_no_free_test},
-		{"NULL list", ft_lstclear_null_list_test},
-		{"NULL function", ft_lstclear_null_func_test},
-		{"NULL both", ft_lstclear_null_both_test}
-	};
-
-	run_tests("ft_lstclear", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                              ft_lstiter tests                              */
-/* ************************************************************************** */
-
-static void	iter_func(void *content) {
-	(*(int *)content)++;
-}
-
-static void	ft_lstiter_basic_test(void) {
-	t_list	*lst = create_test_list(1, 2, 3, 0);
-
-	ft_lstiter(lst, iter_func);
-	if (*(int *)lst->content != 2 || *(int *)lst->next->content != 3 || *(int *)lst->next->next->content != 4)
-		abort();
-}
-
-static void	ft_lstiter_null_list_test(void) {
-	ft_lstiter(NULL, iter_func);
-}
-
-static void	ft_lstiter_null_func_test(void) {
-	t_list	*lst = create_test_list(1, 2, 3, 0);
+static void	iter_null_test(void) {
+	t_list	*lst = make_list(2);
 
 	ft_lstiter(lst, NULL);
-	while (lst)
-	{
-		t_list *tmp = lst->next;
-		free(lst->content);
-		free(lst);
-		lst = tmp;
-	}
-}
-
-static void	ft_lstiter_null_both_test(void) {
-	ft_lstiter(NULL, NULL);
-}
-
-static void	test_ft_lstiter(void) {
-	const t_test	tests[] = {
-		{"basic", ft_lstiter_basic_test},
-		{"NULL list", ft_lstiter_null_list_test},
-		{"NULL function", ft_lstiter_null_func_test},
-		{"NULL both", ft_lstiter_null_both_test}
-	};
-
-	run_tests("ft_lstiter", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                              ft_lstmap tests                               */
-/* ************************************************************************** */
-
-static void	ft_lstmap_basic_test(void) {
-	t_list			*lst = create_test_list(1, 2, 3, 0);
-	t_list			*new_lst = ft_lstmap(lst, map_func_dynamic_content, free);
-
-	if (!new_lst || *(int *)new_lst->content != 2 || *(int *)new_lst->next->content != 4
-		|| *(int *)new_lst->next->next->content != 6 || new_lst->next->next->next)
-		abort();
-}
-
-static void	ft_lstmap_null_list_test(void) {
-	t_list *lst = ft_lstmap(NULL, map_func_dynamic_content, free);
-
-	if (lst)
-		abort();
-}
-
-static void	ft_lstmap_null_func_test(void) {
-	t_list	*lst = create_test_list(1, 2, 3, 0);
-
 	ft_lstmap(lst, NULL, free);
-	while (lst)
-	{
-		t_list *tmp = lst->next;
-		free(lst->content);
-		free(lst);
-		lst = tmp;
-	}
 }
 
-static void	ft_lstmap_null_both_test(void) {
-	ft_lstmap(NULL, NULL, free);
-}
-
-// f does not allocate, so every malloc is a node: lstmap must return NULL when one fails
-static void	ft_lstmap_malloc_fail_test(void) {
-	t_list	*lst = create_test_list(1, 2, 3, 0);
-
-	g_malloc_wrap_enabled = 1;
-	t_list *new_lst = ft_lstmap(lst, map_func_shared_content, del_func_dummy);
-	g_malloc_wrap_enabled = 0;
-	if (new_lst && g_malloc_count >= g_malloc_fail_at)
-		abort();
-}
-
-static void	test_ft_lstmap(void) {
-	const t_test	tests[] = {
-		{"basic", ft_lstmap_basic_test},
-		{"NULL list", ft_lstmap_null_list_test},
-		{"NULL function", ft_lstmap_null_func_test},
-		{"NULL both", ft_lstmap_null_both_test},
-		{"malloc fail #1 (node 1)", ft_lstmap_malloc_fail_test, .fail_at = 1},
-		{"malloc fail #2 (node 2)", ft_lstmap_malloc_fail_test, .fail_at = 2},
-		{"malloc fail #3 (node 3)", ft_lstmap_malloc_fail_test, .fail_at = 3}
-	};
-
-	run_tests("ft_lstmap", tests, ARRAY_SIZE(tests));
-}
+static const t_test	g_iter_tests[] = {
+	{"ft_lstiter: each content in order, empty list", lstiter_test},
+	{"ft_lstmap: new contents, source untouched", lstmap_test},
+	{"ft_lstmap: NULL when a node's malloc fails", lstmap_fail_test},
+	{"ft_lstiter, ft_lstmap with f NULL", iter_null_test, UB_SAFE},
+};
 
 int	main(void) {
-	test_ft_lstnew();
-	test_ft_lstadd_front();
-	test_ft_lstsize();
-	test_ft_lstlast();
-	test_ft_lstadd_back();
-	test_ft_lstdelone();
-	test_ft_lstclear();
-	test_ft_lstiter();
-	test_ft_lstmap();
-	return (g_tests_failed ? 1 : 0);
+	RUN_GROUP("lists: building", g_build_tests);
+	RUN_GROUP("lists: freeing", g_free_tests);
+	RUN_GROUP("lists: iterating", g_iter_tests);
+	return fairy_summary();
 }

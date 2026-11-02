@@ -1,1558 +1,689 @@
 #include "libft_fairy.h"
 
+/*
+ * Part 1 and 2. Wherever the libc has the function, ft_ is compared with it
+ * over a sweep of inputs; strlcpy, strlcat and strnstr, missing from glibc,
+ * with a reference written after the BSD man pages. Buffers are compared
+ * whole, so a byte written past the end is caught.
+ */
+
 /* ************************************************************************** */
-/*                  ft_is* / ft_toupper / ft_tolower tests                    */
+/*                     character classes, toupper, tolower                    */
 /* ************************************************************************** */
 
-#include <ctype.h>
-#include <stdio.h>
-
-// Compares ft with the libc function ref for every value from EOF to 255.
-// A character class function must return exactly 1 on a match (subject rule).
-static void	test_char_func(char *function_name, int (*ft)(int), int (*ref)(int), int is_class) {
-	char		label[64] = "EOF to 255";
-	const char	*tests[] = {label};
-	int			passed[] = {1};
-
-	for (int c = -1; c < 256 && passed[0]; c++) {
+/* Every value from EOF to 255; a class function must return 1 (subject). */
+static void	char_test(const char *name, int (*ft)(int), int (*ref)(int), int is_class) {
+	for (int c = EOF; c <= 255; c++) {
 		int	expected = is_class ? !!ref(c) : ref(c);
-		int	got = ft(c);
 
-		if (got != expected) {
-			snprintf(label, sizeof(label), "EOF to 255  (c = %d: got %d, expected %d)", c, got, expected);
-			passed[0] = 0;
-		}
+		EXPECT(ft(c) == expected, "%s(%d): got %d, expected %d", name, c, ft(c), expected);
 	}
-	if (!passed[0] || VERBOSE)
-		print_test_results(function_name, 1, tests, passed);
 }
+
+#define CHAR_TEST(ft, ref, is_class) \
+	static void	ft##_test(void) { char_test(#ft, ft, ref, is_class); }
+
+CHAR_TEST(ft_isalpha, isalpha, 1)
+CHAR_TEST(ft_isdigit, isdigit, 1)
+CHAR_TEST(ft_isalnum, isalnum, 1)
+CHAR_TEST(ft_isascii, isascii, 1)
+CHAR_TEST(ft_isprint, isprint, 1)
+CHAR_TEST(ft_toupper, toupper, 0)
+CHAR_TEST(ft_tolower, tolower, 0)
+
+static const t_test	g_char_tests[] = {
+	{"ft_isalpha, EOF to 255", ft_isalpha_test},
+	{"ft_isdigit, EOF to 255", ft_isdigit_test},
+	{"ft_isalnum, EOF to 255", ft_isalnum_test},
+	{"ft_isascii, EOF to 255", ft_isascii_test},
+	{"ft_isprint, EOF to 255", ft_isprint_test},
+	{"ft_toupper, EOF to 255", ft_toupper_test},
+	{"ft_tolower, EOF to 255", ft_tolower_test},
+};
 
 /* ************************************************************************** */
-/*                            ft_strlen tests                                 */
+/*                                   memory                                   */
 /* ************************************************************************** */
 
-#include <stdlib.h>
+#define BUF 64
 
-static void	ft_strlen_empty_test(void) {
-	if (ft_strlen(""))
-		abort();
+/* Fills a buffer with a pattern that no tested operation writes. */
+static void	pattern(unsigned char *b) {
+	for (int i = 0; i < BUF; i++)
+		b[i] = 0x80 | (i * 7);
 }
 
-static void	ft_strlen_hello_test(void) {
-	if (ft_strlen("hello") != 5)
-		abort();
+static void	memset_test(void) {
+	const int		values[] = {0, 'A', 200, -1, 'A' + 256};
+	unsigned char	a[BUF];
+	unsigned char	b[BUF];
+	char			call[64];
+
+	for (size_t v = 0; v < ARRAY_SIZE(values); v++)
+		for (int off = 0; off < 8; off++)
+			for (size_t n = 0; n <= 40; n++) {
+				pattern(a);
+				pattern(b);
+				memset(b + off, values[v], n);
+				EXPECT(ft_memset(a + off, values[v], n) == a + off, "ft_memset: wrong return value");
+				snprintf(call, sizeof(call), "ft_memset(buf + %d, %d, %zu)", off, values[v], n);
+				expect_same(call, a, b, BUF);
+			}
 }
 
-static void	ft_strlen_null_test(void) {
-	ft_strlen(NULL);
+static void	bzero_test(void) {
+	unsigned char	a[BUF];
+	unsigned char	b[BUF];
+	char			call[64];
+
+	for (int off = 0; off < 8; off++)
+		for (size_t n = 0; n <= 40; n++) {
+			pattern(a);
+			pattern(b);
+			memset(b + off, 0, n);
+			ft_bzero(a + off, n);
+			snprintf(call, sizeof(call), "ft_bzero(buf + %d, %zu)", off, n);
+			expect_same(call, a, b, BUF);
+		}
 }
 
-static void	test_ft_strlen(void) {
-	const t_test	tests[] = {
-		{"empty string", ft_strlen_empty_test},
-		{"'hello'", ft_strlen_hello_test},
-		{"NULL (should crash)", ft_strlen_null_test, .crash = 1}
-	};
+static void	memcpy_test(void) {
+	unsigned char	src[BUF];
+	unsigned char	a[BUF];
+	unsigned char	b[BUF];
+	char			call[64];
 
-	run_tests("ft_strlen", tests, ARRAY_SIZE(tests));
+	for (int i = 0; i < BUF; i++)
+		src[i] = i * 13;
+	for (int off = 0; off < 8; off++)
+		for (size_t n = 0; n <= 40; n++) {
+			pattern(a);
+			pattern(b);
+			memcpy(b + off, src + 7 - off, n);
+			EXPECT(ft_memcpy(a + off, src + 7 - off, n) == a + off, "ft_memcpy: wrong return value");
+			snprintf(call, sizeof(call), "ft_memcpy(buf + %d, src + %d, %zu)", off, 7 - off, n);
+			expect_same(call, a, b, BUF);
+		}
 }
 
-/* ************************************************************************** */
-/*                            ft_memset tests                                 */
-/* ************************************************************************** */
+/* Every overlap: source and destination 0 to 15 bytes apart, both ways. */
+static void	memmove_test(void) {
+	unsigned char	a[BUF];
+	unsigned char	b[BUF];
+	char			call[64];
 
-#include <string.h>
-
-static void	ft_memset_basic_test(void) {
-	char str1[10] = {0};
-	char str2[10] = {0};
-	void *ret = ft_memset(str1, 'A', 5);
-	memset(str2, 'A', 5);
-	if (memcmp(str1, str2, 10) || ret != str1)
-		abort();
+	for (int src = 0; src < 16; src++)
+		for (int dst = 0; dst < 16; dst++)
+			for (size_t n = 0; n <= 32; n++) {
+				pattern(a);
+				pattern(b);
+				memmove(b + dst, b + src, n);
+				EXPECT(ft_memmove(a + dst, a + src, n) == a + dst, "ft_memmove: wrong return value");
+				snprintf(call, sizeof(call), "ft_memmove(buf + %d, buf + %d, %zu)", dst, src, n);
+				expect_same(call, a, b, BUF);
+			}
 }
 
-static void	ft_memset_zero_test(void) {
-	char str1[10] = {0};
-	char str2[10] = {0};
-	memset(str1, 'X', 10);
-	memset(str2, 'X', 10);
-	void *ret = ft_memset(str1, 0, 10);
-	memset(str2, 0, 10);
-	if (memcmp(str1, str2, 10) || ret != str1)
-		abort();
+static long	offset(const void *p, const void *base) {
+	return p ? (const char *)p - (const char *)base : -1;
 }
 
-static void	ft_memset_uchar_test(void) {
-	char str1[10];
-	char str2[10];
-	memset(str1, 200, 10);
-	ft_memset(str2, 200, 10);
-	if (memcmp(str1, str2, 10))
-		abort();
+static void	memchr_test(void) {
+	unsigned char	s[256];
+
+	for (int i = 0; i < 256; i++)
+		s[i] = 255 - i;
+	for (int c = -256; c < 512; c++)
+		for (size_t n = 0; n <= 256; n += 15)
+			EXPECT(ft_memchr(s, c, n) == memchr(s, c, n), "ft_memchr(s, %d, %zu): got s + %ld, expected s + %ld"
+				" (s - 1: NULL)", c, n, offset(ft_memchr(s, c, n), s), offset(memchr(s, c, n), s));
 }
 
-static void	ft_memset_null_test(void) {
-	ft_memset(NULL, 0, 5);
+static void	memcmp_test(void) {
+	const char	s[][6] = {"", "a", "abc", "abd", "ab\0c", "ab\0d", "\200", "\0", "abc\200", "abc\001"};
+
+	for (size_t i = 0; i < ARRAY_SIZE(s); i++)
+		for (size_t j = 0; j < ARRAY_SIZE(s); j++)
+			for (size_t n = 0; n <= sizeof(*s); n++)
+				EXPECT(SIGN(ft_memcmp(s[i], s[j], n)) == SIGN(memcmp(s[i], s[j], n)), "ft_memcmp(%s, %s, %zu): "
+					"got %d, expected a %s value", show(s[i]), show(s[j]), n, ft_memcmp(s[i], s[j], n),
+					memcmp(s[i], s[j], n) ? memcmp(s[i], s[j], n) > 0 ? "positive" : "negative" : "zero");
 }
 
-static void	test_ft_memset(void) {
-	const t_test	tests[] = {
-		{"basic memset", ft_memset_basic_test},
-		{"with 0", ft_memset_zero_test},
-		{"unsigned char (200)", ft_memset_uchar_test},
-		{"NULL (should crash)", ft_memset_null_test, .crash = 1}
-	};
-
-	run_tests("ft_memset", tests, ARRAY_SIZE(tests));
+static void	memset_null_test(void) {
+	ft_memset(NULL, 'a', 5);
 }
 
-/* ************************************************************************** */
-/*                            ft_bzero tests                                  */
-/* ************************************************************************** */
+static void	memcpy_null_test(void) {
+	char	buf[8];
 
-static void	ft_bzero_5_bytes_test(void) {
-	char str[10];
-	memset(str, 'A', 10);
-	ft_bzero(str, 5);
-	for (int i = 0; i < 5; i++)
-		if (str[i])
-			abort();
-	for (int i = 5; i < 10; i++)
-		if (str[i] != 'A')
-			abort();
+	ft_memcpy(buf, NULL, 5);
 }
 
-static void	ft_bzero_all_test(void) {
-	char str[10];
-	memset(str, 'A', 10);
-	ft_bzero(str, 10);
-	for (int i = 0; i < 10; i++)
-		if (str[i])
-			abort();
+static void	memmove_null_test(void) {
+	char	buf[8];
+
+	ft_memmove(buf, NULL, 5);
 }
 
-static void	test_ft_bzero(void) {
-	const t_test	tests[] = {
-		{"bzero 5 bytes", ft_bzero_5_bytes_test},
-		{"bzero all", ft_bzero_all_test}
-	};
-
-	run_tests("ft_bzero", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_memcpy tests                                 */
-/* ************************************************************************** */
-
-static void	ft_memcpy_basic_test(void) {
-	char src[] = "Hello, World!";
-	char dst1[20] = {0};
-	char dst2[20] = {0};
-	ft_memcpy(dst1, src, strlen(src) + 1);
-	memcpy(dst2, src, strlen(src) + 1);
-	if (strcmp(dst1, dst2))
-		abort();
-}
-
-static void	ft_memcpy_partial_test(void) {
-	char dst[20] = {0};
-	ft_memcpy(dst, "42", 2);
-	if (dst[0] != '4' || dst[1] != '2')
-		abort();
-}
-
-static void	ft_memcpy_return_test(void) {
-	char dst[20] = {0};
-	if (ft_memcpy(dst, "42", 2) != dst)
-		abort();
-}
-
-static void	ft_memcpy_null_n_zero_test(void) {
+static void	null_n_zero_test(void) {
 	ft_memcpy(NULL, NULL, 0);
-}
-
-static void	ft_memcpy_null_test(void) {
-	char buffer[10];
-	ft_memcpy((void *)buffer, NULL, 5);
-}
-
-static void	test_ft_memcpy(void) {
-	const t_test	tests[] = {
-		{"basic memcpy", ft_memcpy_basic_test},
-		{"partial copy", ft_memcpy_partial_test},
-		{"return value", ft_memcpy_return_test},
-		{"NULL dst and src, n = 0 (no crash)", ft_memcpy_null_n_zero_test},
-		{"NULL (should crash)", ft_memcpy_null_test, .crash = 1}
-	};
-
-	run_tests("ft_memcpy", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_memmove tests                                */
-/* ************************************************************************** */
-
-static void	ft_memmove_forward_test(void) {
-	char str1[] = "Hello, World!";
-	char str2[] = "Hello, World!";
-	ft_memmove(str1 + 2, str1, 5);
-	memmove(str2 + 2, str2, 5);
-	if (strcmp(str1, str2))
-		abort();
-}
-
-static void	ft_memmove_backward_test(void) {
-	char str1[] = "Hello, World!";
-	char str2[] = "Hello, World!";
-	ft_memmove(str1, str1 + 2, 5);
-	memmove(str2, str2 + 2, 5);
-	if (strcmp(str1, str2))
-		abort();
-}
-
-static void	ft_memmove_no_overlap_test(void) {
-	char dst1[20] = {0};
-	char dst2[20] = {0};
-	ft_memmove(dst1, "Hello", 5);
-	memmove(dst2, "Hello", 5);
-	if (memcmp(dst1, dst2, 5))
-		abort();
-}
-
-static void	ft_memmove_same_ptr_test(void) {
-	char str1[] = "Hello";
-	char str2[] = "Hello";
-	ft_memmove(str1, str1, 5);
-	memmove(str2, str2, 5);
-	if (strcmp(str1, str2))
-		abort();
-}
-
-static void	ft_memmove_n_zero_test(void) {
-	char str1[] = "Hello";
-	char str2[] = "Hello";
-	ft_memmove(str1 + 2, str1, 0);
-	memmove(str2 + 2, str2, 0);
-	if (strcmp(str1, str2))
-		abort();
-}
-
-static void	ft_memmove_minimal_overlap_test(void) {
-	char str1[] = "abcdef";
-	char str2[] = "abcdef";
-	ft_memmove(str1 + 1, str1, 5);
-	memmove(str2 + 1, str2, 5);
-	if (strcmp(str1, str2))
-		abort();
-}
-
-static void	ft_memmove_return_test(void) {
-	char str[] = "Hello";
-	if (ft_memmove(str + 1, str, 3) != str + 1)
-		abort();
-}
-
-static void	ft_memmove_null_n_zero_test(void) {
 	ft_memmove(NULL, NULL, 0);
 }
 
-static void	ft_memmove_null_test(void) {
-	char buffer[10];
-	ft_memmove((void *)buffer, NULL, 5);
-}
-
-static void	test_ft_memmove(void) {
-	const t_test	tests[] = {
-		{"overlapping forward", ft_memmove_forward_test},
-		{"overlapping backward", ft_memmove_backward_test},
-		{"no overlap", ft_memmove_no_overlap_test},
-		{"dst == src", ft_memmove_same_ptr_test},
-		{"n = 0", ft_memmove_n_zero_test},
-		{"minimal overlap", ft_memmove_minimal_overlap_test},
-		{"return value", ft_memmove_return_test},
-		{"NULL dst and src, n = 0 (no crash)", ft_memmove_null_n_zero_test},
-		{"NULL (should crash)", ft_memmove_null_test, .crash = 1}
-	};
-
-	run_tests("ft_memmove", tests, ARRAY_SIZE(tests));
-}
+static const t_test	g_memory_tests[] = {
+	{"ft_memset: 5 values, 8 offsets, 0 to 40 bytes", memset_test},
+	{"ft_bzero: 8 offsets, 0 to 40 bytes", bzero_test},
+	{"ft_memcpy: 8 offsets, 0 to 40 bytes", memcpy_test},
+	{"ft_memmove: every overlap, both ways", memmove_test},
+	{"ft_memchr: every c from -256 to 511", memchr_test},
+	{"ft_memcmp: unsigned bytes, past '\\0'", memcmp_test},
+	{"ft_memset(NULL, ...)", memset_null_test, UB_CRASH},
+	{"ft_memcpy(buf, NULL, 5)", memcpy_null_test, UB_CRASH},
+	{"ft_memmove(buf, NULL, 5)", memmove_null_test, UB_CRASH},
+	{"ft_memcpy, ft_memmove (NULL, NULL, 0)", null_n_zero_test, UB_SAFE},
+};
 
 /* ************************************************************************** */
-/*                            ft_strlcpy tests                                */
+/*                                  strings                                   */
 /* ************************************************************************** */
 
-static void	ft_strlcpy_basic_test(void) {
-	char dst[10];
-	size_t len = ft_strlcpy(dst, "Hello", sizeof(dst));
-	if (strcmp(dst, "Hello") || len != 5)
-		abort();
+static const char	*g_strs[] = {"", "a", "hello", "Hello\xC8World\xC8!", "abcabcabd",
+	" \t\n spaces \v\f\r", "\x7f\x80\xff"};
+
+static size_t	ref_strlcpy(char *dst, const char *src, size_t size) {
+	size_t	len = strlen(src);
+
+	if (size) {
+		size_t	n = len < size - 1 ? len : size - 1;
+
+		memcpy(dst, src, n);
+		dst[n] = '\0';
+	}
+	return len;
 }
 
-static void	ft_strlcpy_truncation_test(void) {
-	char dst[10];
-	size_t len = ft_strlcpy(dst, "Hello, World!", 6);
-	if (strcmp(dst, "Hello") || len != 13)
-		abort();
+static size_t	ref_strlcat(char *dst, const char *src, size_t size) {
+	size_t	dlen = strnlen(dst, size);
+
+	if (dlen == size)
+		return size + strlen(src);
+	return dlen + ref_strlcpy(dst + dlen, src, size - dlen);
 }
 
-static void	ft_strlcpy_size_zero_test(void) {
-	char dst[10] = "test";
-	size_t len = ft_strlcpy(dst, "42", 0);
-	if (len != 2 || strcmp(dst, "test"))
-		abort();
+static char	*ref_strnstr(const char *big, const char *little, size_t len) {
+	size_t	n = strlen(little);
+
+	for (size_t i = 0; big[i] && n && i + n <= len; i++)
+		if (!strncmp(big + i, little, n))
+			return (char *)big + i;
+	return n ? NULL : (char *)big;
 }
 
-static void	test_ft_strlcpy(void) {
-	const t_test	tests[] = {
-		{"basic copy", ft_strlcpy_basic_test},
-		{"truncation", ft_strlcpy_truncation_test},
-		{"size 0 (dst untouched)", ft_strlcpy_size_zero_test}
-	};
+static void	strlen_test(void) {
+	char	big[10000];
 
-	run_tests("ft_strlcpy", tests, ARRAY_SIZE(tests));
+	memset(big, 'z', sizeof(big) - 1);
+	big[sizeof(big) - 1] = '\0';
+	for (size_t i = 0; i < ARRAY_SIZE(g_strs); i++)
+		EXPECT(ft_strlen(g_strs[i]) == strlen(g_strs[i]), "ft_strlen(%s): got %zu, expected %zu",
+			show(g_strs[i]), ft_strlen(g_strs[i]), strlen(g_strs[i]));
+	EXPECT(ft_strlen(big) == sizeof(big) - 1, "ft_strlen of 9999 chars: got %zu", ft_strlen(big));
 }
 
-/* ************************************************************************** */
-/*                            ft_strlcat tests                                */
-/* ************************************************************************** */
+/* Every size from 0 to past the end, the whole buffer compared. */
+static void	strlcpy_test(void) {
+	char	a[BUF];
+	char	b[BUF];
+	size_t	got;
+	size_t	expected;
 
-static void	ft_strlcat_basic_test(void) {
-	char dst[20];
-	strcpy(dst, "Hello");
-	size_t len = ft_strlcat(dst, " World", 20);
-	if (strcmp(dst, "Hello World") || len != 11)
-		abort();
+	for (size_t i = 0; i < ARRAY_SIZE(g_strs); i++)
+		for (size_t size = 0; size <= strlen(g_strs[i]) + 2; size++) {
+			pattern((unsigned char *)a);
+			pattern((unsigned char *)b);
+			got = ft_strlcpy(a, g_strs[i], size);
+			expected = ref_strlcpy(b, g_strs[i], size);
+			EXPECT(got == expected, "ft_strlcpy(dst, %s, %zu): returned %zu, expected %zu",
+				show(g_strs[i]), size, got, expected);
+			EXPECT(!memcmp(a, b, BUF), "ft_strlcpy(dst, %s, %zu): dst is %s, expected %s",
+				show(g_strs[i]), size, size ? show(a) : "changed", size ? show(b) : "untouched");
+		}
 }
 
-static void	ft_strlcat_truncation_test(void) {
-	char dst[20];
-	strcpy(dst, "Hello");
-	size_t len = ft_strlcat(dst, " World!", 10);
-	if (strcmp(dst, "Hello Wor") || len != 12)
-		abort();
+/* dst holding 0 to 5 chars, every size, including those shorter than dst. */
+static void	strlcat_test(void) {
+	const char	*dsts[] = {"", "a", "abc", "hello"};
+	char		a[BUF];
+	char		b[BUF];
+	size_t		got;
+	size_t		expected;
+
+	for (size_t d = 0; d < ARRAY_SIZE(dsts); d++)
+		for (size_t i = 0; i < ARRAY_SIZE(g_strs); i++)
+			for (size_t size = 0; size <= strlen(dsts[d]) + strlen(g_strs[i]) + 2; size++) {
+				pattern((unsigned char *)a);
+				pattern((unsigned char *)b);
+				strcpy(a, dsts[d]);
+				strcpy(b, dsts[d]);
+				got = ft_strlcat(a, g_strs[i], size);
+				expected = ref_strlcat(b, g_strs[i], size);
+				EXPECT(got == expected, "ft_strlcat(%s, %s, %zu): returned %zu, expected %zu",
+					show(dsts[d]), show(g_strs[i]), size, got, expected);
+				EXPECT(!memcmp(a, b, BUF), "ft_strlcat(%s, %s, %zu): dst is %s, expected %s",
+					show(dsts[d]), show(g_strs[i]), size, show(a), show(b));
+			}
 }
 
-static void	ft_strlcat_dstsize_eq_dstlen_test(void) {
-	char dst[20];
-	strcpy(dst, "Hello");
-	size_t len = ft_strlcat(dst, " World", 5);
-	if (strcmp(dst, "Hello") || len != 11)
-		abort();
+/* Every c from -300 to 600: the search is for (char)c, '\0' included. */
+static void	strchr_test(void) {
+	for (size_t i = 0; i < ARRAY_SIZE(g_strs); i++)
+		for (int c = -300; c <= 600; c++) {
+			EXPECT(ft_strchr(g_strs[i], c) == strchr(g_strs[i], c), "ft_strchr(%s, %d): got %s, expected %s",
+				show(g_strs[i]), c, show(ft_strchr(g_strs[i], c)), show(strchr(g_strs[i], c)));
+			EXPECT(ft_strrchr(g_strs[i], c) == strrchr(g_strs[i], c), "ft_strrchr(%s, %d): got %s, expected %s",
+				show(g_strs[i]), c, show(ft_strrchr(g_strs[i], c)), show(strrchr(g_strs[i], c)));
+		}
 }
 
-static void	ft_strlcat_dstsize_lt_dstlen_test(void) {
-	char dst[20];
-	strcpy(dst, "Hello");
-	size_t len = ft_strlcat(dst, " World", 3);
-	if (strcmp(dst, "Hello") || len != 9)
-		abort();
+/* Each pair, n from 0 to past both ends and SIZE_MAX: the sign must match. */
+static void	strncmp_test(void) {
+	const char		*s[] = {"", "a", "ab", "abc", "abd", "abc\200", "\200", "ab\0c", "abc\0d"};
+	const size_t	ns[] = {0, 1, 2, 3, 4, 6, SIZE_MAX};
+
+	for (size_t i = 0; i < ARRAY_SIZE(s); i++)
+		for (size_t j = 0; j < ARRAY_SIZE(s); j++)
+			for (size_t n = 0; n < ARRAY_SIZE(ns); n++)
+				EXPECT(SIGN(ft_strncmp(s[i], s[j], ns[n])) == SIGN(strncmp(s[i], s[j], ns[n])),
+					"ft_strncmp(%s, %s, %zu): got %d, expected a %s value", show(s[i]), show(s[j]),
+					ns[n], ft_strncmp(s[i], s[j], ns[n]), strncmp(s[i], s[j], ns[n])
+					? strncmp(s[i], s[j], ns[n]) > 0 ? "positive" : "negative" : "zero");
 }
 
-static void	ft_strlcat_dstsize_zero_test(void) {
-	char dst[20];
-	strcpy(dst, "Hello");
-	size_t len = ft_strlcat(dst, " World", 0);
-	if (strcmp(dst, "Hello") || len != 6)
-		abort();
+/* Each haystack and needle, len from 0 to past the end and SIZE_MAX. */
+static void	strnstr_test(void) {
+	const char	*needles[] = {"", "a", "b", "aab", "abd", "abc", "World", "Hello\xC8World\xC8!!", "xyz"};
+
+	for (size_t h = 0; h < ARRAY_SIZE(g_strs); h++)
+		for (size_t n = 0; n < ARRAY_SIZE(needles); n++)
+			for (size_t k = 0; k <= strlen(g_strs[h]) + 3; k++) {
+				size_t	len = k > strlen(g_strs[h]) + 2 ? SIZE_MAX : k;
+
+				EXPECT(ft_strnstr(g_strs[h], needles[n], len) == ref_strnstr(g_strs[h], needles[n], len),
+					"ft_strnstr(%s, %s, %zu): got %s, expected %s", show(g_strs[h]), show(needles[n]), len,
+					show(ft_strnstr(g_strs[h], needles[n], len)), show(ref_strnstr(g_strs[h], needles[n], len)));
+			}
 }
 
-static void	ft_strlcat_empty_src_test(void) {
-	char dst[20];
-	strcpy(dst, "Hello");
-	size_t len = ft_strlcat(dst, "", 20);
-	if (strcmp(dst, "Hello") || len != 5)
-		abort();
+static void	atoi_test(void) {
+	const char	*s[] = {"0", "42", "-42", "+42", "  \t\n\v\f\r 42", "\v \t\r  \n    \f-42   *", "0042",
+		"42abc", "4 2", "", "+", "-", "++2", "--4", "-+9", "+-8", " \t-R66", "\x01 42", "2147483647",
+		"-2147483648", "-0", "+0", "  +000123456789xyz", "1e3", "\200 5"};
+
+	for (size_t i = 0; i < ARRAY_SIZE(s); i++)
+		EXPECT(ft_atoi(s[i]) == atoi(s[i]), "ft_atoi(%s): got %d, expected %d", show(s[i]), ft_atoi(s[i]), atoi(s[i]));
 }
 
-static void	ft_strlcat_empty_dst_test(void) {
-	char dst[20];
-	dst[0] = '\0';
-	size_t len = ft_strlcat(dst, "Hello", 20);
-	if (strcmp(dst, "Hello") || len != 5)
-		abort();
+static void	strlen_null_test(void) {
+	ft_strlen(NULL);
 }
 
-static void	ft_strlcat_no_room_test(void) {
-	char dst[20];
-	strcpy(dst, "Hello");
-	size_t len = ft_strlcat(dst, "X", 6);
-	if (strcmp(dst, "Hello") || len != 6)
-		abort();
-}
-
-static void	test_ft_strlcat(void) {
-	const t_test	tests[] = {
-		{"basic concat", ft_strlcat_basic_test},
-		{"truncation", ft_strlcat_truncation_test},
-		{"dstsize = strlen(dst)", ft_strlcat_dstsize_eq_dstlen_test},
-		{"dstsize < strlen(dst)", ft_strlcat_dstsize_lt_dstlen_test},
-		{"dstsize = 0", ft_strlcat_dstsize_zero_test},
-		{"empty src", ft_strlcat_empty_src_test},
-		{"empty dst", ft_strlcat_empty_dst_test},
-		{"no room for concat", ft_strlcat_no_room_test}
-	};
-
-	run_tests("ft_strlcat", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_strchr tests                                 */
-/* ************************************************************************** */
-
-static void	ft_strchr_find_o_test(void) {
-	const char str[] = "Hello\xC8World";
-	if (ft_strchr(str, 'o') != strchr(str, 'o'))
-		abort();
-}
-
-static void	ft_strchr_find_W_test(void) {
-	const char str[] = "Hello\xC8World";
-	if (ft_strchr(str, 'W') != strchr(str, 'W'))
-		abort();
-}
-
-static void	ft_strchr_find_null_test(void) {
-	const char str[] = "Hello\xC8World";
-	if (ft_strchr(str, '\0') != strchr(str, '\0'))
-		abort();
-}
-
-static void	ft_strchr_find_first_char_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strchr(str, 'H') != strchr(str, 'H'))
-		abort();
-}
-
-static void	ft_strchr_find_last_char_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strchr(str, '!') != strchr(str, '!'))
-		abort();
-}
-
-static void	ft_strchr_not_found_test(void) {
-	const char str[] = "Hello\xC8World";
-	if (ft_strchr(str, 'x'))
-		abort();
-}
-
-static void	ft_strchr_uchar_test(void) {
-	const char str[] = "Hello\xC8World";
-	if (ft_strchr(str, 200) != strchr(str, 200))
-		abort();
-}
-
-static void	ft_strchr_over_255_test(void) {
-	const char str[] = "Hello\xC8World";
-	if (ft_strchr(str, 'o' + 256) != strchr(str, 'o' + 256))
-		abort();
-}
-
-static void	ft_strchr_null_test(void) {
+static void	strchr_null_test(void) {
 	ft_strchr(NULL, 'a');
 }
 
-static void	test_ft_strchr(void) {
-	const t_test	tests[] = {
-		{"find 'o'", ft_strchr_find_o_test},
-		{"find 'W'", ft_strchr_find_W_test},
-		{"find '\\0'", ft_strchr_find_null_test},
-		{"find first char", ft_strchr_find_first_char_test},
-		{"find last char", ft_strchr_find_last_char_test},
-		{"not found 'x'", ft_strchr_not_found_test},
-		{"find unsigned char (200)", ft_strchr_uchar_test},
-		{"find c > 255 (wraps to char)", ft_strchr_over_255_test},
-		{"NULL (should crash)", ft_strchr_null_test, .crash = 1}
-	};
-
-	run_tests("ft_strchr", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_strrchr tests                                */
-/* ************************************************************************** */
-
-static void	ft_strrchr_find_last_o_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strrchr(str, 'o') != strrchr(str, 'o'))
-		abort();
-}
-
-static void	ft_strrchr_find_W_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strrchr(str, 'W') != strrchr(str, 'W'))
-		abort();
-}
-
-static void	ft_strrchr_find_null_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strrchr(str, '\0') != strrchr(str, '\0'))
-		abort();
-}
-
-static void	ft_strrchr_find_first_char_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strrchr(str, 'H') != strrchr(str, 'H'))
-		abort();
-}
-
-static void	ft_strrchr_find_last_char_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strrchr(str, '!') != strrchr(str, '!'))
-		abort();
-}
-
-static void	ft_strrchr_not_found_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strrchr(str, 'x'))
-		abort();
-}
-
-static void	ft_strrchr_uchar_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strrchr(str, 200) != strrchr(str, 200))
-		abort();
-}
-
-static void	ft_strrchr_over_255_test(void) {
-	const char str[] = "Hello\xC8World\xC8!";
-	if (ft_strrchr(str, 'o' + 256) != strrchr(str, 'o' + 256))
-		abort();
-}
-
-static void	ft_strrchr_null_test(void) {
+static void	strrchr_null_test(void) {
 	ft_strrchr(NULL, 'a');
 }
 
-static void	test_ft_strrchr(void) {
-	const t_test	tests[] = {
-		{"find last 'o'", ft_strrchr_find_last_o_test},
-		{"find 'W'", ft_strrchr_find_W_test},
-		{"find '\\0'", ft_strrchr_find_null_test},
-		{"find first char", ft_strrchr_find_first_char_test},
-		{"find last char", ft_strrchr_find_last_char_test},
-		{"not found 'x'", ft_strrchr_not_found_test},
-		{"find unsigned char (200)", ft_strrchr_uchar_test},
-		{"find c > 255 (wraps to char)", ft_strrchr_over_255_test},
-		{"NULL (should crash)", ft_strrchr_null_test, .crash = 1}
-	};
-
-	run_tests("ft_strrchr", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_strncmp tests                                */
-/* ************************************************************************** */
-
-static void	ft_strncmp_equal_test(void) {
-	if (ft_strncmp("Hello", "Hello", 5))
-		abort();
-}
-
-static void	ft_strncmp_different_test(void) {
-	if (ft_strncmp("Hello", "World", 5) >= 0)
-		abort();
-}
-
-static void	ft_strncmp_partial_test(void) {
-	if (ft_strncmp("Hello", "Help", 3))
-		abort();
-}
-
-static void	ft_strncmp_n_zero_test(void) {
-	if (ft_strncmp("Hello", "World", 0))
-		abort();
-}
-
-static void	ft_strncmp_with_null_test(void) {
-	if (ft_strncmp("Hello", "Hello\0test", 10))
-		abort();
-}
-
-static void	ft_strncmp_n_gt_strlen_test(void) {
-	if (ft_strncmp("abc", "abcd", 5) >= 0)
-		abort();
-}
-
-static void	ft_strncmp_uchar_test(void) {
-	if (ft_strncmp("test\200", "test\0", 6) <= 0)
-		abort();
-}
-
-static void	ft_strncmp_size_max_test(void) {
-	const size_t	size_max = ~(size_t)0;
-	if (ft_strncmp("abc", "abc", size_max))
-		abort();
-}
-
-static void	ft_strncmp_null_test(void) {
+static void	strncmp_null_test(void) {
 	ft_strncmp(NULL, "abc", 3);
 }
 
-static void	test_ft_strncmp(void) {
-	const t_test	tests[] = {
-		{"equal strings", ft_strncmp_equal_test},
-		{"different strings (sign)", ft_strncmp_different_test},
-		{"partial compare", ft_strncmp_partial_test},
-		{"n = 0", ft_strncmp_n_zero_test},
-		{"with \\0", ft_strncmp_with_null_test},
-		{"n > strlen", ft_strncmp_n_gt_strlen_test},
-		{"unsigned char comparison", ft_strncmp_uchar_test},
-		{"SIZE_MAX", ft_strncmp_size_max_test},
-		{"NULL (should crash)", ft_strncmp_null_test, .crash = 1}
-	};
-
-	run_tests("ft_strncmp", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_memchr tests                                 */
-/* ************************************************************************** */
-
-static void	ft_memchr_find_o_test(void) {
-	const char *str = "Hello, World!";
-	if (ft_memchr(str, 'o', 13) != memchr(str, 'o', 13))
-		abort();
-}
-
-static void	ft_memchr_find_W_test(void) {
-	const char *str = "Hello, World!";
-	if (ft_memchr(str, 'W', 13) != memchr(str, 'W', 13))
-		abort();
-}
-
-static void	ft_memchr_not_found_test(void) {
-	const char *str = "Hello, World!";
-	if (ft_memchr(str, 'x', 13))
-		abort();
-}
-
-static void	ft_memchr_n_zero_test(void) {
-	const char *str = "Hello, World!";
-	if (ft_memchr(str, 'H', 0))
-		abort();
-}
-
-static void	ft_memchr_nullchar_test(void) {
-	if (ft_memchr("Hello, World!", '\0', 14) != memchr("Hello, World!", '\0', 14))
-		abort();
-}
-
-static void	ft_memchr_uchar_test(void) {
-	const unsigned char bin[] = {0, 128, 255, 42};
-	if (ft_memchr(bin, 255, sizeof(bin)) != memchr(bin, 255, sizeof(bin)))
-		abort();
-}
-
-static void	ft_memchr_over_255_test(void) {
-	const char *str = "Hello, World!";
-	if (ft_memchr(str, 'o' + 256, 13) != memchr(str, 'o' + 256, 13))
-		abort();
-}
-
-static void	test_ft_memchr(void) {
-	const t_test	tests[] = {
-		{"find first 'o'", ft_memchr_find_o_test},
-		{"find 'W'", ft_memchr_find_W_test},
-		{"not found 'x'", ft_memchr_not_found_test},
-		{"n = 0", ft_memchr_n_zero_test},
-		{"find '\\0'", ft_memchr_nullchar_test},
-		{"find unsigned char (255)", ft_memchr_uchar_test},
-		{"find c > 255 (wraps to char)", ft_memchr_over_255_test}
-	};
-
-	run_tests("ft_memchr", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_memcmp tests                                 */
-/* ************************************************************************** */
-
-static void	ft_memcmp_equal_test(void) {
-	if (ft_memcmp("Hello", "Hello", 5))
-		abort();
-}
-
-static void	ft_memcmp_different_test(void) {
-	if (!ft_memcmp("Hello", "World", 5))
-		abort();
-}
-
-static void	ft_memcmp_n_zero_test(void) {
-	if (ft_memcmp("Hello", "World", 0))
-		abort();
-}
-
-static void	ft_memcmp_binary_test(void) {
-	char buf1[] = {1, 2, 3, 4, 5};
-	char buf2[] = {1, 2, 3, 4, 6};
-	if (ft_memcmp(buf1, buf2, 5) >= 0)
-		abort();
-}
-
-static void	ft_memcmp_uchar_gt_127_test(void) {
-	char high1[] = {'A', '\200', 0};
-	char high2[] = {'A', '\0', 0};
-	if (ft_memcmp(high1, high2, 2) <= 0)
-		abort();
-}
-
-static void	ft_memcmp_symmetry_test(void) {
-	char high1[] = {'A', '\200', 0};
-	char high2[] = {'A', '\0', 0};
-	if (ft_memcmp(high2, high1, 2) >= 0)
-		abort();
-}
-
-static void	ft_memcmp_past_nul_test(void) {
-	if (ft_memcmp("ab\0c", "ab\0d", 4) >= 0)
-		abort();
-}
-
-static void	test_ft_memcmp(void) {
-	const t_test	tests[] = {
-		{"equal", ft_memcmp_equal_test},
-		{"different", ft_memcmp_different_test},
-		{"n = 0", ft_memcmp_n_zero_test},
-		{"binary data", ft_memcmp_binary_test},
-		{"unsigned char > 127 (\\200 vs \\0)", ft_memcmp_uchar_gt_127_test},
-		{"unsigned char symmetry", ft_memcmp_symmetry_test},
-		{"does not stop at '\\0'", ft_memcmp_past_nul_test}
-	};
-
-	run_tests("ft_memcmp", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_strnstr tests                                */
-/* ************************************************************************** */
-
-static void	ft_strnstr_find_world_test(void) {
-	const char *haystack = "Hello, World!";
-	if (ft_strnstr(haystack, "World", 13) != haystack + 7)
-		abort();
-}
-
-static void	ft_strnstr_find_o_test(void) {
-	const char *haystack = "Hello, World!";
-	if (ft_strnstr(haystack, "o", 13) != haystack + 4)
-		abort();
-}
-
-static void	ft_strnstr_not_found_test(void) {
-	const char *haystack = "Hello, World!";
-	if (ft_strnstr(haystack, "xyz", 13))
-		abort();
-}
-
-static void	ft_strnstr_empty_needle_test(void) {
-	const char *haystack = "Hello, World!";
-	if (ft_strnstr(haystack, "", 13) != haystack)
-		abort();
-}
-
-static void	ft_strnstr_partial_match_test(void) {
-	const char *haystack = "aaabc";
-	if (ft_strnstr(haystack, "aab", 5) != haystack + 1)
-		abort();
-}
-
-static void	ft_strnstr_len_exact_test(void) {
-	const char *haystack = "Hello World";
-	if (ft_strnstr(haystack, "World", 11) != haystack + 6)
-		abort();
-}
-
-static void	ft_strnstr_len_too_short_test(void) {
-	if (ft_strnstr("Hello, World!", "World", 5))
-		abort();
-}
-
-static void	ft_strnstr_len_zero_test(void) {
-	if (ft_strnstr("Hello, World!", "World", 0))
-		abort();
-}
-
-static void	ft_strnstr_needle_cut_test(void) {
-	if (ft_strnstr("Hello World", "World", 8))
-		abort();
-}
-
-static void	ft_strnstr_needle_longer_test(void) {
-	if (ft_strnstr("Hi", "Hello", 10))
-		abort();
-}
-
-static void	test_ft_strnstr(void) {
-	const t_test	tests[] = {
-		{"find 'World'", ft_strnstr_find_world_test},
-		{"find 'o'", ft_strnstr_find_o_test},
-		{"not found", ft_strnstr_not_found_test},
-		{"empty needle", ft_strnstr_empty_needle_test},
-		{"match after a partial match", ft_strnstr_partial_match_test},
-		{"needle ends exactly at len", ft_strnstr_len_exact_test},
-		{"len too short", ft_strnstr_len_too_short_test},
-		{"len = 0", ft_strnstr_len_zero_test},
-		{"needle cut by len", ft_strnstr_needle_cut_test},
-		{"needle longer than haystack", ft_strnstr_needle_longer_test}
-	};
-
-	run_tests("ft_strnstr", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_atoi tests                                   */
-/* ************************************************************************** */
-
-static void	ft_atoi_whitespace_plus_test(void) {
-	if (ft_atoi("  \t\n\v\f\r +42   $") != 42)
-		abort();
-}
-
-static void	ft_atoi_whitespace_minus_test(void) {
-	if (ft_atoi("\v \t\r  \n    \f-42   *") != -42)
-		abort();
-}
-
-static void	ft_atoi_zero_test(void) {
-	if (ft_atoi("0"))
-		abort();
-}
-
-static void	ft_atoi_double_plus_test(void) {
-	if (ft_atoi("++2"))
-		abort();
-}
-
-static void	ft_atoi_double_minus_test(void) {
-	if (ft_atoi("--4"))
-		abort();
-}
-
-static void	ft_atoi_minus_plus_test(void) {
-	if (ft_atoi("-+9"))
-		abort();
-}
-
-static void	ft_atoi_plus_minus_test(void) {
-	if (ft_atoi("+-8"))
-		abort();
-}
-
-static void	ft_atoi_minus_letter_test(void) {
-	if (ft_atoi(" \t-R66"))
-		abort();
-}
-
-static void	ft_atoi_int_max_test(void) {
-	if (ft_atoi("2147483647") != 2147483647)
-		abort();
-}
-
-static void	ft_atoi_int_min_test(void) {
-	if (ft_atoi("-2147483648") != -2147483648)
-		abort();
-}
-
-static void	ft_atoi_empty_test(void) {
-	if (ft_atoi(""))
-		abort();
-}
-
-static void	ft_atoi_lone_sign_test(void) {
-	if (ft_atoi("+") || ft_atoi("-"))
-		abort();
-}
-
-static void	ft_atoi_leading_zeros_test(void) {
-	if (ft_atoi("0042") != 42)
-		abort();
-}
-
-static void	ft_atoi_trailing_junk_test(void) {
-	if (ft_atoi("42abc") != 42)
-		abort();
-}
-
-static void	ft_atoi_null_test(void) {
+static void	atoi_null_test(void) {
 	ft_atoi(NULL);
 }
 
-static void	test_ft_atoi(void) {
-	const t_test	tests[] = {
-		{"'  \\t\\n\\v\\f\\r +42   $'", ft_atoi_whitespace_plus_test},
-		{"'\\v \\t\\r  \\n    \\f-42   *'", ft_atoi_whitespace_minus_test},
-		{"'0'", ft_atoi_zero_test},
-		{"'++2'", ft_atoi_double_plus_test},
-		{"'--4'", ft_atoi_double_minus_test},
-		{"'-+9'", ft_atoi_minus_plus_test},
-		{"'+-8'", ft_atoi_plus_minus_test},
-		{"' \\t-R66'", ft_atoi_minus_letter_test},
-		{"INT_MAX", ft_atoi_int_max_test},
-		{"INT_MIN", ft_atoi_int_min_test},
-		{"empty string", ft_atoi_empty_test},
-		{"lone sign ('+', '-')", ft_atoi_lone_sign_test},
-		{"leading zeros ('0042')", ft_atoi_leading_zeros_test},
-		{"trailing junk ('42abc')", ft_atoi_trailing_junk_test},
-		{"NULL (should crash)", ft_atoi_null_test, .crash = 1}
+static const t_test	g_string_tests[] = {
+	{"ft_strlen", strlen_test},
+	{"ft_strlcpy: every size, whole buffer", strlcpy_test},
+	{"ft_strlcat: every size, dst longer than size", strlcat_test},
+	{"ft_strchr, ft_strrchr: every c from -300 to 600", strchr_test},
+	{"ft_strncmp: unsigned chars, past '\\0', SIZE_MAX", strncmp_test},
+	{"ft_strnstr: every len, SIZE_MAX", strnstr_test},
+	{"ft_atoi: spaces, signs, junk, INT_MIN, INT_MAX", atoi_test},
+	{"ft_strlen(NULL)", strlen_null_test, UB_CRASH},
+	{"ft_strchr(NULL, 'a')", strchr_null_test, UB_CRASH},
+	{"ft_strrchr(NULL, 'a')", strrchr_null_test, UB_CRASH},
+	{"ft_strncmp(NULL, \"abc\", 3)", strncmp_null_test, UB_CRASH},
+	{"ft_atoi(NULL)", atoi_null_test, UB_CRASH},
+};
+
+/* ************************************************************************** */
+/*                                allocations                                 */
+/* ************************************************************************** */
+
+static void	calloc_test(void) {
+	const size_t	sizes[][2] = {{1, 1}, {5, sizeof(int)}, {3, 17}, {1000, 1}};
+
+	for (size_t i = 0; i < ARRAY_SIZE(sizes); i++) {
+		unsigned char	*p = ft_calloc(sizes[i][0], sizes[i][1]);
+		size_t			n = sizes[i][0] * sizes[i][1];
+
+		EXPECT(p && alloc_size(p) >= n, "ft_calloc(%zu, %zu): %zu bytes malloc'd", sizes[i][0], sizes[i][1],
+			p ? alloc_size(p) : 0);
+		for (size_t j = 0; j < n; j++)
+			EXPECT(!p[j], "ft_calloc(%zu, %zu): byte %zu is not 0", sizes[i][0], sizes[i][1], j);
+	}
+}
+
+/* Subject: with nmemb or size 0, a unique pointer that free() accepts. */
+static void	calloc_zero_test(void) {
+	void	*a = ft_calloc(0, 5);
+	void	*b = ft_calloc(5, 0);
+
+	EXPECT(a && b && a != b, "ft_calloc(0, 5), ft_calloc(5, 0): got %p and %p, the subject wants unique "
+		"pointers that free() accepts", a, b);
+	free(a);
+	free(b);
+}
+
+static void	calloc_overflow_test(void) {
+	EXPECT(!ft_calloc(SIZE_MAX / 2, 3), "ft_calloc(SIZE_MAX / 2, 3): nmemb * size overflows, expected NULL");
+	EXPECT(!ft_calloc(SIZE_MAX, SIZE_MAX), "ft_calloc(SIZE_MAX, SIZE_MAX): expected NULL");
+}
+
+static void	strdup_test(void) {
+	char	call[128];
+
+	for (size_t i = 0; i < ARRAY_SIZE(g_strs); i++) {
+		snprintf(call, sizeof(call), "ft_strdup(%s)", show(g_strs[i]));
+		check_str(call, ft_strdup(g_strs[i]), g_strs[i]);
+	}
+}
+
+static void	malloc_fail_test(void) {
+	EACH_MALLOC_FAILING(ft_calloc(4, 4));
+	EACH_MALLOC_FAILING(ft_strdup("hello"));
+}
+
+static const t_test	g_alloc_tests[] = {
+	{"ft_calloc: zeroed, big enough", calloc_test},
+	{"ft_calloc(0, 5), ft_calloc(5, 0)", calloc_zero_test},
+	{"ft_calloc: nmemb * size overflowing", calloc_overflow_test},
+	{"ft_strdup", strdup_test},
+	{"ft_calloc, ft_strdup: NULL when malloc fails", malloc_fail_test},
+};
+
+/* ************************************************************************** */
+/*                          Part 2: new strings                               */
+/* ************************************************************************** */
+
+static void	substr_test(void) {
+	const struct {
+		const char		*s;
+		unsigned int	start;
+		size_t			len;
+		const char		*expected;
+	}	cases[] = {
+		{"Hello, World!", 7, 5, "World"}, {"Hello", 0, 3, "Hel"}, {"Hello", 2, 100, "llo"},
+		{"Hello", 0, 0, ""}, {"Hello", 5, 1, ""}, {"Hello", 10, 5, ""}, {"", 0, 5, ""},
+		{"", 1, 1, ""}, {"Hello", 4, 1, "o"}, {"Hello", UINT_MAX, 3, ""}, {"Hello", 1, SIZE_MAX, "ello"},
 	};
+	char	call[96];
 
-	run_tests("ft_atoi", tests, ARRAY_SIZE(tests));
+	for (size_t i = 0; i < ARRAY_SIZE(cases); i++) {
+		snprintf(call, sizeof(call), "ft_substr(%s, %u, %zu)", show(cases[i].s), cases[i].start, cases[i].len);
+		check_str(call, ft_substr(cases[i].s, cases[i].start, cases[i].len), cases[i].expected);
+	}
 }
 
-/* ************************************************************************** */
-/*                            ft_calloc tests                                 */
-/* ************************************************************************** */
+static void	strjoin_test(void) {
+	const char	*cases[][3] = {{"Hello", " World", "Hello World"}, {"", "abc", "abc"},
+		{"abc", "", "abc"}, {"", "", ""}, {"\xff", "\x01", "\xff\x01"}};
+	char		call[96];
 
-static void	ft_calloc_all_zeros_test(void) {
-	int *arr = ft_calloc(5, sizeof(int));
-	if (!arr || alloc_size(arr) < 5 * sizeof(int))
-		abort();
-	for (int i = 0; i < 5; i++)
-		if (arr[i] != 0)
-			abort();
-	free(arr);
+	for (size_t i = 0; i < ARRAY_SIZE(cases); i++) {
+		snprintf(call, sizeof(call), "ft_strjoin(%s, %s)", show(cases[i][0]), show(cases[i][1]));
+		check_str(call, ft_strjoin(cases[i][0], cases[i][1]), cases[i][2]);
+	}
 }
 
-static void	ft_calloc_overflow_test(void) {
-	const size_t	size_max = ~(size_t)0;
-	char			*ptr = ft_calloc(size_max >> 1, size_max >> 1);
-	if (ptr)
-		abort();
+static void	strtrim_test(void) {
+	const char	*cases[][3] = {{"   Hello   ", " ", "Hello"}, {"xxHelloxWorldxx", "x", "HelloxWorld"},
+		{"abcdcba", "abc", "d"}, {"Hello", "xyz", "Hello"}, {"Hello", "", "Hello"}, {"", " ", ""},
+		{"", "", ""}, {"xxxxx", "x", ""}, {" \t\n a b \n\t ", " \t\n", "a b"}, {"aXb", "ab", "X"}};
+	char		call[96];
+
+	for (size_t i = 0; i < ARRAY_SIZE(cases); i++) {
+		snprintf(call, sizeof(call), "ft_strtrim(%s, %s)", show(cases[i][0]), show(cases[i][1]));
+		check_str(call, ft_strtrim(cases[i][0], cases[i][1]), cases[i][2]);
+	}
 }
 
-// Subject: if nmemb or size is 0, return a unique pointer that can be passed to free()
-static void	ft_calloc_zero_count_test(void) {
-	void *ptr = ft_calloc(0, 5);
-	if (!ptr)
-		abort();
-	free(ptr);
+/* Each word a malloc'd string, the array malloc'd with room for its NULL. */
+static void	split_case(const char *s, char c, const char *const *expected) {
+	char	**got = ft_split(s, c);
+	char	call[96];
+	size_t	n = 0;
+
+	snprintf(call, sizeof(call), "ft_split(%s, %s)", show(s), show((char []){c, 0}));
+	EXPECT(got, "%s: got NULL", call);
+	while (expected[n]) {
+		EXPECT(got[n], "%s: %zu words, expected more", call, n);
+		check_str(call, got[n], expected[n]);
+		n++;
+	}
+	EXPECT(!got[n], "%s: word %zu is %s, expected NULL", call, n, show(got[n]));
+	EXPECT(alloc_size(got) >= (n + 1) * sizeof(char *), "%s: %zu words + NULL in a %zu-byte array",
+		call, n, alloc_size(got));
 }
 
-static void	ft_calloc_zero_size_test(void) {
-	void *ptr = ft_calloc(5, 0);
-	if (!ptr)
-		abort();
-	free(ptr);
+static void	split_test(void) {
+	split_case("Hello World 42", ' ', (const char *[]){"Hello", "World", "42", NULL});
+	split_case("___Hello___World___", '_', (const char *[]){"Hello", "World", NULL});
+	split_case("", ' ', (const char *[]){NULL});
+	split_case("xxx", 'x', (const char *[]){NULL});
+	split_case("Hello", '\0', (const char *[]){"Hello", NULL});
+	split_case("HelloWorld", ' ', (const char *[]){"HelloWorld", NULL});
+	split_case("a", ' ', (const char *[]){"a", NULL});
+	split_case("  a  b  ", ' ', (const char *[]){"a", "b", NULL});
+	split_case("Hello\xffWorld", '\xff', (const char *[]){"Hello", "World", NULL});
+	split_case("1,2,,3,", ',', (const char *[]){"1", "2", "3", NULL});
 }
 
-static void	test_ft_calloc(void) {
-	const t_test	tests[] = {
-		{"all zeros", ft_calloc_all_zeros_test},
-		{"overflow", ft_calloc_overflow_test},
-		{"count = 0 (freeable pointer)", ft_calloc_zero_count_test},
-		{"size = 0 (freeable pointer)", ft_calloc_zero_size_test}
-	};
+/* Each value next to a power of 10, compared with printf's %d. */
+static void	itoa_test(void) {
+	char	expected[16];
+	char	call[32];
 
-	run_tests("ft_calloc", tests, ARRAY_SIZE(tests));
+	for (long p = 1; p <= 1000000000; p *= 10)
+		for (long v = p - 1; v <= p + 1; v++)
+			for (int sign = -1; sign <= 1; sign += 2) {
+				snprintf(expected, sizeof(expected), "%ld", sign * v);
+				snprintf(call, sizeof(call), "ft_itoa(%ld)", sign * v);
+				check_str(call, ft_itoa(sign * v), expected);
+			}
+	check_str("ft_itoa(INT_MAX)", ft_itoa(INT_MAX), "2147483647");
+	check_str("ft_itoa(INT_MIN)", ft_itoa(INT_MIN), "-2147483648");
 }
 
-/* ************************************************************************** */
-/*                            ft_strdup tests                                 */
-/* ************************************************************************** */
-
-static void	ft_strdup_basic_test(void) {
-	check_str(ft_strdup("Hello"), "Hello");
-}
-
-static void	ft_strdup_empty_test(void) {
-	check_str(ft_strdup(""), "");
-}
-
-static void	test_ft_strdup(void) {
-	const t_test	tests[] = {
-		{"basic dup", ft_strdup_basic_test},
-		{"empty string", ft_strdup_empty_test}
-	};
-
-	run_tests("ft_strdup", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_substr tests                                 */
-/* ************************************************************************** */
-
-static void	ft_substr_basic_test(void) {
-	check_str(ft_substr("Hello, World!", 7, 5), "World");
-}
-
-static void	ft_substr_from_start_test(void) {
-	check_str(ft_substr("Hello", 0, 3), "Hel");
-}
-
-static void	ft_substr_start_gt_len_test(void) {
-	check_str(ft_substr("Hello", 10, 5), "");
-}
-
-static void	ft_substr_len_too_long_test(void) {
-	check_str(ft_substr("Hello", 2, 100), "llo");
-}
-
-static void	ft_substr_len_zero_test(void) {
-	check_str(ft_substr("test", 0, 0), "");
-}
-
-static void	ft_substr_start_past_end_test(void) {
-	check_str(ft_substr("", 1, 1), "");
-	check_str(ft_substr("abc", 5, 2), "");
-}
-
-static void	ft_substr_start_max_test(void) {
-	check_str(ft_substr("abc", ~(unsigned int)0, 1), "");
-}
-
-static void	ft_substr_len_size_max_test(void) {
-	check_str(ft_substr("Hello", 0, ~(size_t)0), "Hello");
-}
-
-static void	ft_substr_no_modify_test(void) {
-	char s[] = "Hello, World!";
-	char *sub = ft_substr(s, 7, 5);
-	if (strcmp(s, "Hello, World!"))
-		abort();
-	free(sub);
-}
-
-static void	ft_substr_null_test(void) {
-	ft_substr(NULL, 0, 5);
-}
-
-static void	test_ft_substr(void) {
-	const t_test	tests[] = {
-		{"basic substr", ft_substr_basic_test},
-		{"from start", ft_substr_from_start_test},
-		{"start > len", ft_substr_start_gt_len_test},
-		{"len too long", ft_substr_len_too_long_test},
-		{"len = 0", ft_substr_len_zero_test},
-		{"start past end", ft_substr_start_past_end_test},
-		{"start = UINT_MAX", ft_substr_start_max_test},
-		{"len = SIZE_MAX", ft_substr_len_size_max_test},
-		{"source not modified", ft_substr_no_modify_test},
-		{"NULL", ft_substr_null_test}
-	};
-
-	run_tests("ft_substr", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_strjoin tests                                */
-/* ************************************************************************** */
-
-static void	ft_strjoin_basic_test(void) {
-	check_str(ft_strjoin("Hello", " World"), "Hello World");
-}
-
-static void	ft_strjoin_empty_s1_test(void) {
-	check_str(ft_strjoin("", "Hello"), "Hello");
-}
-
-static void	ft_strjoin_empty_s2_test(void) {
-	check_str(ft_strjoin("Hello", ""), "Hello");
-}
-
-static void	ft_strjoin_null_s1_test(void) {
-	ft_strjoin(NULL, "test");
-}
-
-static void	ft_strjoin_null_s2_test(void) {
-	ft_strjoin("test", NULL);
-}
-
-static void	ft_strjoin_null_both_test(void) {
-	ft_strjoin(NULL, NULL);
-}
-
-static void	ft_strjoin_no_modify_test(void) {
-	char s1[] = "Hello";
-	char s2[] = " World";
-	char *joined = ft_strjoin(s1, s2);
-	if (strcmp(s1, "Hello") || strcmp(s2, " World"))
-		abort();
-	free(joined);
-}
-
-static void	test_ft_strjoin(void) {
-	const t_test	tests[] = {
-		{"basic join", ft_strjoin_basic_test},
-		{"empty s1", ft_strjoin_empty_s1_test},
-		{"empty s2", ft_strjoin_empty_s2_test},
-		{"sources not modified", ft_strjoin_no_modify_test},
-		{"NULL s1", ft_strjoin_null_s1_test},
-		{"NULL s2", ft_strjoin_null_s2_test},
-		{"both NULL", ft_strjoin_null_both_test}
-	};
-
-	run_tests("ft_strjoin", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_strtrim tests                                */
-/* ************************************************************************** */
-
-static void	ft_strtrim_spaces_test(void) {
-	check_str(ft_strtrim("   Hello   ", " "), "Hello");
-}
-
-static void	ft_strtrim_custom_set_test(void) {
-	check_str(ft_strtrim("xxxHelloxxx", "x"), "Hello");
-}
-
-static void	ft_strtrim_no_trim_test(void) {
-	check_str(ft_strtrim("Hello", "xyz"), "Hello");
-}
-
-static void	ft_strtrim_multiple_test(void) {
-	check_str(ft_strtrim("abcdcba", "abc"), "d");
-}
-
-static void	ft_strtrim_inner_kept_test(void) {
-	check_str(ft_strtrim("xxHelloxWorldxx", "x"), "HelloxWorld");
-}
-
-static void	ft_strtrim_no_set_test(void) {
-	check_str(ft_strtrim("Hello", ""), "Hello");
-}
-
-static void	ft_strtrim_empty_string_test(void) {
-	check_str(ft_strtrim("", " "), "");
-}
-
-static void	ft_strtrim_all_trim_test(void) {
-	check_str(ft_strtrim("xxxxx", "x"), "");
-}
-
-static void	ft_strtrim_null_input_test(void) {
-	ft_strtrim(NULL, " ");
-}
-
-static void	ft_strtrim_null_set_test(void) {
-	ft_strtrim("test", NULL);
-}
-
-static void	ft_strtrim_null_both_test(void) {
-	ft_strtrim(NULL, NULL);
-}
-
-static void	ft_strtrim_no_modify_test(void) {
-	char s1[] = "   Hello   ";
-	char *trimmed = ft_strtrim(s1, " ");
-	if (strcmp(s1, "   Hello   "))
-		abort();
-	free(trimmed);
-}
-
-static void	test_ft_strtrim(void) {
-	const t_test	tests[] = {
-		{"spaces", ft_strtrim_spaces_test},
-		{"custom set", ft_strtrim_custom_set_test},
-		{"no trim", ft_strtrim_no_trim_test},
-		{"multiple occurrences", ft_strtrim_multiple_test},
-		{"set chars kept inside", ft_strtrim_inner_kept_test},
-		{"no set", ft_strtrim_no_set_test},
-		{"empty string", ft_strtrim_empty_string_test},
-		{"all trim", ft_strtrim_all_trim_test},
-		{"NULL input", ft_strtrim_null_input_test},
-		{"NULL set", ft_strtrim_null_set_test},
-		{"both NULL", ft_strtrim_null_both_test},
-		{"source not modified", ft_strtrim_no_modify_test}
-	};
-
-	run_tests("ft_strtrim", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_split tests                                  */
-/* ************************************************************************** */
-
-static void	ft_split_basic_test(void) {
-	char **arr = ft_split("Hello World 42", ' ');
-	if (!arr || strcmp(arr[0], "Hello") || strcmp(arr[1], "World") || strcmp(arr[2], "42") || arr[3])
-		abort();
-	safe_free_arr(&arr);
-}
-
-static void	ft_split_multiple_delim_test(void) {
-	char **arr = ft_split("___Hello___World___", '_');
-	if (!arr || strcmp(arr[0], "Hello") || strcmp(arr[1], "World") || arr[2])
-		abort();
-	safe_free_arr(&arr);
-}
-
-static void	ft_split_empty_string_test(void) {
-	char **arr = ft_split("", ' ');
-	if (!arr || arr[0])
-		abort();
-	safe_free_arr(&arr);
-}
-
-static void	ft_split_all_delim_test(void) {
-	char **arr = ft_split("xxx", 'x');
-	if (!arr || arr[0])
-		abort();
-	safe_free_arr(&arr);
-}
-
-static void	ft_split_delim_null_test(void) {
-	char **arr = ft_split("Hello", '\0');
-	if (!arr || strcmp(arr[0], "Hello") || arr[1])
-		abort();
-	safe_free_arr(&arr);
-}
-
-static void	ft_split_no_delim_found_test(void) {
-	char **arr = ft_split("HelloWorld", ' ');
-	if (!arr || strcmp(arr[0], "HelloWorld") || arr[1])
-		abort();
-	safe_free_arr(&arr);
-}
-
-static void	ft_split_delim_255_test(void) {
-	char **arr = ft_split("Hello\xFFWorld", (char)255);
-	if (!arr || strcmp(arr[0], "Hello") || strcmp(arr[1], "World") || arr[2])
-		abort();
-	safe_free_arr(&arr);
-}
-
-static void	ft_split_null_test(void) {
-	ft_split(NULL, ' ');
-}
-
-// Subject: NULL if any allocation fails
-static void	ft_split_malloc_fail_test(void) {
-	g_malloc_wrap_enabled = 1;
-	char **arr = ft_split("Hello World Test", ' ');
-	g_malloc_wrap_enabled = 0;
-	if (arr && g_malloc_count >= g_malloc_fail_at)
-		abort();
-	safe_free_arr(&arr);
-}
-
-static void	test_ft_split(void) {
-	const t_test	tests[] = {
-		{"basic split", ft_split_basic_test},
-		{"multiple delimiters", ft_split_multiple_delim_test},
-		{"empty string", ft_split_empty_string_test},
-		{"all delimiters", ft_split_all_delim_test},
-		{"delimiter = '\\0'", ft_split_delim_null_test},
-		{"no delimiter found", ft_split_no_delim_found_test},
-		{"delimiter = 255 (\\xFF)", ft_split_delim_255_test},
-		{"NULL", ft_split_null_test},
-		{"malloc fail #1 (array)", ft_split_malloc_fail_test, .fail_at = 1},
-		{"malloc fail #2 (word 1)", ft_split_malloc_fail_test, .fail_at = 2},
-		{"malloc fail #3 (word 2)", ft_split_malloc_fail_test, .fail_at = 3},
-		{"malloc fail #4 (word 3)", ft_split_malloc_fail_test, .fail_at = 4},
-		{"malloc fail #5 (other)", ft_split_malloc_fail_test, .fail_at = 5}
-	};
-
-	run_tests("ft_split", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_itoa tests                                   */
-/* ************************************************************************** */
-
-static void	ft_itoa_42_test(void) {
-	check_str(ft_itoa(42), "42");
-}
-
-static void	ft_itoa_minus_42_test(void) {
-	check_str(ft_itoa(-42), "-42");
-}
-
-static void	ft_itoa_zero_test(void) {
-	check_str(ft_itoa(0), "0");
-}
-
-static void	ft_itoa_int_min_test(void) {
-	check_str(ft_itoa(-2147483648), "-2147483648");
-}
-
-static void	ft_itoa_int_max_test(void) {
-	check_str(ft_itoa(2147483647), "2147483647");
-}
-
-static void	test_ft_itoa(void) {
-	const t_test	tests[] = {
-		{"42", ft_itoa_42_test},
-		{"-42", ft_itoa_minus_42_test},
-		{"0", ft_itoa_zero_test},
-		{"INT_MIN", ft_itoa_int_min_test},
-		{"INT_MAX", ft_itoa_int_max_test}
-	};
-
-	run_tests("ft_itoa", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                            ft_strmapi tests                                */
-/* ************************************************************************** */
-
-static char	mapi_func(unsigned int i, char c) {
+static char	map_index(unsigned int i, char c) {
 	return c + i;
 }
 
-static void	ft_strmapi_basic_test(void) {
-	check_str(ft_strmapi("abc", mapi_func), "ace");
+static void	strmapi_test(void) {
+	check_str("ft_strmapi(\"abc\", c + i)", ft_strmapi("abc", map_index), "ace");
+	check_str("ft_strmapi(\"\", c + i)", ft_strmapi("", map_index), "");
+	check_str("ft_strmapi(\"aaaaaaaaaa\", c + i)", ft_strmapi("aaaaaaaaaa", map_index), "abcdefghij");
 }
 
-static void	ft_strmapi_empty_test(void) {
-	check_str(ft_strmapi("", mapi_func), "");
+static char	*g_iteri_base;
+
+static void	iteri_check(unsigned int i, char *c) {
+	EXPECT(c == g_iteri_base + i, "ft_striteri: f got index %u with the address of char %td", i, c - g_iteri_base);
+	*c += i;
 }
 
-static void	ft_strmapi_null_input_test(void) {
-	ft_strmapi(NULL, mapi_func);
+static void	striteri_test(void) {
+	char	s[] = "aaaaaaaaaa";
+
+	g_iteri_base = s;
+	ft_striteri(s, iteri_check);
+	EXPECT(!strcmp(s, "abcdefghij"), "ft_striteri(\"aaaaaaaaaa\", c += i): got %s", show(s));
+	ft_striteri(s + 10, iteri_check);
 }
 
-static void	ft_strmapi_null_func_test(void) {
-	ft_strmapi("test", NULL);
+static void	malloc_fail2_test(void) {
+	EACH_MALLOC_FAILING(ft_substr("Hello", 1, 3));
+	EACH_MALLOC_FAILING(ft_strjoin("Hello", " World"));
+	EACH_MALLOC_FAILING(ft_strtrim("  Hello  ", " "));
+	EACH_MALLOC_FAILING(ft_split("  Hello World  42 ", ' '));
+	EACH_MALLOC_FAILING(ft_itoa(-42));
+	EACH_MALLOC_FAILING(ft_strmapi("abc", map_index));
 }
 
-static void	ft_strmapi_null_both_test(void) {
-	ft_strmapi(NULL, NULL);
+static void	substr_null_test(void) {
+	ft_substr(NULL, 0, 5);
 }
 
-static void	ft_strmapi_no_modify_test(void) {
-	char s[] = "abc";
-	char *result = ft_strmapi(s, mapi_func);
-	if (strcmp(s, "abc"))
-		abort();
-	free(result);
+static void	strjoin_null_test(void) {
+	ft_strjoin(NULL, "a");
+	ft_strjoin("a", NULL);
 }
 
-static void	test_ft_strmapi(void) {
-	const t_test	tests[] = {
-		{"basic", ft_strmapi_basic_test},
-		{"empty string", ft_strmapi_empty_test},
-		{"NULL input", ft_strmapi_null_input_test},
-		{"f = NULL", ft_strmapi_null_func_test},
-		{"both NULL", ft_strmapi_null_both_test},
-		{"source not modified", ft_strmapi_no_modify_test}
-	};
-
-	run_tests("ft_strmapi", tests, ARRAY_SIZE(tests));
+static void	strtrim_null_test(void) {
+	ft_strtrim(NULL, " ");
+	ft_strtrim("a", NULL);
 }
+
+static void	split_null_test(void) {
+	ft_split(NULL, ' ');
+}
+
+static void	strmapi_null_test(void) {
+	ft_strmapi(NULL, map_index);
+	ft_strmapi("a", NULL);
+}
+
+static void	striteri_null_test(void) {
+	ft_striteri(NULL, iteri_check);
+	ft_striteri((char []){"a"}, NULL);
+}
+
+static const t_test	g_new_string_tests[] = {
+	{"ft_substr: start past the end, UINT_MAX, SIZE_MAX", substr_test},
+	{"ft_strjoin", strjoin_test},
+	{"ft_strtrim: inner chars kept, all trimmed", strtrim_test},
+	{"ft_split: delimiters in a row, '\\0', \\xff", split_test},
+	{"ft_itoa: around powers of 10, INT_MIN, INT_MAX", itoa_test},
+	{"ft_strmapi", strmapi_test},
+	{"ft_striteri: index and address of each char", striteri_test},
+	{"each malloc failing in turn: NULL, no crash", malloc_fail2_test},
+	{"ft_substr(NULL, ...)", substr_null_test, UB_SAFE},
+	{"ft_strjoin with NULL", strjoin_null_test, UB_SAFE},
+	{"ft_strtrim with NULL", strtrim_null_test, UB_SAFE},
+	{"ft_split(NULL, ' ')", split_null_test, UB_SAFE},
+	{"ft_strmapi with NULL", strmapi_null_test, UB_SAFE},
+	{"ft_striteri with NULL", striteri_null_test, UB_SAFE},
+};
 
 /* ************************************************************************** */
-/*                            ft_striteri tests                               */
+/*                           Part 2: file descriptors                         */
 /* ************************************************************************** */
 
-static void	iteri_func(unsigned int i, char *c) {
-	*c = *c + i;
+/* Opens a pipe: the function under test writes to p[1]. */
+static void	open_pipe(int p[2]) {
+	if (pipe(p) < 0)
+		die("libft-fairy: pipe");
 }
 
-static void	ft_striteri_basic_test(void) {
-	char str[] = "abc";
-	ft_striteri(str, iteri_func);
-	if (str[0] != 'a' || str[1] != 'c' || str[2] != 'e')
-		abort();
+/* Reads back the pipe: exactly len bytes of expected, else fails. */
+static void	expect_written(int p[2], const char *expected, size_t len, const char *call) {
+	static char	got[16384];
+	ssize_t		n;
+
+	close(p[1]);
+	n = read(p[0], got, sizeof(got) - 1);
+	close(p[0]);
+	got[n > 0 ? n : 0] = '\0';
+	EXPECT(n == (ssize_t)len && !memcmp(got, expected, len), "%s: wrote %s (%zd bytes), expected %s (%zu)",
+		call, show(got), n, show(expected), len);
 }
 
-static void	ft_striteri_null_input_test(void) {
-	ft_striteri(NULL, iteri_func);
+static void	putchar_fd_test(void) {
+	int		p[2];
+	char	call[32];
+
+	for (int c = 0; c < 256; c++) {
+		open_pipe(p);
+		ft_putchar_fd(c, p[1]);
+		snprintf(call, sizeof(call), "ft_putchar_fd(%d, fd)", c);
+		expect_written(p, (char []){c, 0}, 1, call);
+	}
 }
 
-static void	ft_striteri_null_func_test(void) {
-	ft_striteri("test", NULL);
+static void	putstr_fd_test(void) {
+	static char	big[10000];
+	int			p[2];
+
+	memset(big, 'z', sizeof(big) - 1);
+	open_pipe(p);
+	ft_putstr_fd("Hello, World!", p[1]);
+	expect_written(p, "Hello, World!", 13, "ft_putstr_fd(\"Hello, World!\", fd)");
+	open_pipe(p);
+	ft_putstr_fd("", p[1]);
+	expect_written(p, "", 0, "ft_putstr_fd(\"\", fd)");
+	open_pipe(p);
+	ft_putstr_fd(big, p[1]);
+	expect_written(p, big, sizeof(big) - 1, "ft_putstr_fd(9999 chars, fd)");
 }
 
-static void	ft_striteri_null_both_test(void) {
-	ft_striteri(NULL, NULL);
+static void	putendl_fd_test(void) {
+	int	p[2];
+
+	open_pipe(p);
+	ft_putendl_fd("Hello", p[1]);
+	expect_written(p, "Hello\n", 6, "ft_putendl_fd(\"Hello\", fd)");
+	open_pipe(p);
+	ft_putendl_fd("", p[1]);
+	expect_written(p, "\n", 1, "ft_putendl_fd(\"\", fd)");
 }
 
-static void	test_ft_striteri(void) {
-	const t_test	tests[] = {
-		{"basic", ft_striteri_basic_test},
-		{"NULL input", ft_striteri_null_input_test},
-		{"f = NULL", ft_striteri_null_func_test},
-		{"both NULL", ft_striteri_null_both_test}
-	};
+static void	putnbr_fd_test(void) {
+	const int	vals[] = {0, 1, -1, 9, -9, 10, -10, 42, -42, 100, 12345, -12345, INT_MAX, INT_MIN};
+	char		expected[16];
+	char		call[32];
+	int			p[2];
 
-	run_tests("ft_striteri", tests, ARRAY_SIZE(tests));
+	for (size_t i = 0; i < ARRAY_SIZE(vals); i++) {
+		snprintf(expected, sizeof(expected), "%d", vals[i]);
+		snprintf(call, sizeof(call), "ft_putnbr_fd(%d, fd)", vals[i]);
+		open_pipe(p);
+		ft_putnbr_fd(vals[i], p[1]);
+		expect_written(p, expected, strlen(expected), call);
+	}
 }
 
-/* ************************************************************************** */
-/*                        ft_putchar_fd tests                                 */
-/* ************************************************************************** */
-
-#include <fcntl.h>
-#include <unistd.h>
-
-// Calls put(arg, fd) on a pipe and aborts unless exactly `expected` was written
-static void	check_fd_output(void (*put)(void *, int), void *arg, const char *expected) {
-	char	buf[64];
-	int		fds[2];
-	ssize_t	len;
-
-	if (pipe(fds) == -1)
-		error_exit("libft-fairy: pipe failed");
-	put(arg, fds[1]);
-	close(fds[1]);
-	len = read(fds[0], buf, sizeof(buf));
-	close(fds[0]);
-	if (len != (ssize_t)strlen(expected) || memcmp(buf, expected, len))
-		abort();
+static void	put_null_test(void) {
+	ft_putstr_fd(NULL, 1);
+	ft_putendl_fd(NULL, 1);
 }
 
-static void	wrapper_putchar(void *c, int fd) {
-	ft_putchar_fd(*(char *)c, fd);
-}
-
-static void	wrapper_putchar_str(void *s, int fd) {
-	char *str = (char *)s;
-	for (int i = 0; str[i]; i++)
-		ft_putchar_fd(str[i], fd);
-}
-
-static void	ft_putchar_AB_test(void) {
-	check_fd_output(wrapper_putchar_str, "AB", "AB");
-}
-
-static void	ft_putchar_0_test(void) {
-	check_fd_output(wrapper_putchar, &(char){'0'}, "0");
-}
-
-static void	test_ft_putchar_fd(void) {
-	const t_test	tests[] = {
-		{"'A' and 'B'", ft_putchar_AB_test},
-		{"'0'", ft_putchar_0_test}
-	};
-
-	run_tests("ft_putchar_fd", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                        ft_putstr_fd tests                                  */
-/* ************************************************************************** */
-
-static void	wrapper_putstr(void *s, int fd) {
-	ft_putstr_fd((char *)s, fd);
-}
-
-static void	ft_putstr_hello_test(void) {
-	check_fd_output(wrapper_putstr, "Hello, World!", "Hello, World!");
-}
-
-static void	ft_putstr_null_test(void) {
-	ft_putstr_fd(NULL, open("/dev/null", O_WRONLY));
-}
-
-static void	test_ft_putstr_fd(void) {
-	const t_test	tests[] = {
-		{"'Hello, World!'", ft_putstr_hello_test},
-		{"NULL", ft_putstr_null_test}
-	};
-
-	run_tests("ft_putstr_fd", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                        ft_putendl_fd tests                                 */
-/* ************************************************************************** */
-
-static void	wrapper_putendl(void *s, int fd) {
-	ft_putendl_fd((char *)s, fd);
-}
-
-static void	ft_putendl_hello_test(void) {
-	check_fd_output(wrapper_putendl, "Hello", "Hello\n");
-}
-
-static void	ft_putendl_empty_test(void) {
-	check_fd_output(wrapper_putendl, "", "\n");
-}
-
-static void	ft_putendl_null_test(void) {
-	ft_putendl_fd(NULL, open("/dev/null", O_WRONLY));
-}
-
-static void	test_ft_putendl_fd(void) {
-	const t_test	tests[] = {
-		{"'Hello' with newline", ft_putendl_hello_test},
-		{"empty string with newline", ft_putendl_empty_test},
-		{"NULL", ft_putendl_null_test}
-	};
-
-	run_tests("ft_putendl_fd", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                        ft_putnbr_fd tests                                  */
-/* ************************************************************************** */
-
-static void	wrapper_putnbr(void *n, int fd) {
-	ft_putnbr_fd(*(int *)n, fd);
-}
-
-static void	ft_putnbr_42_test(void) {
-	check_fd_output(wrapper_putnbr, &(int){42}, "42");
-}
-
-static void	ft_putnbr_minus_42_test(void) {
-	check_fd_output(wrapper_putnbr, &(int){-42}, "-42");
-}
-
-static void	ft_putnbr_zero_test(void) {
-	check_fd_output(wrapper_putnbr, &(int){0}, "0");
-}
-
-static void	ft_putnbr_int_min_test(void) {
-	check_fd_output(wrapper_putnbr, &(int){-2147483648}, "-2147483648");
-}
-
-static void	ft_putnbr_int_max_test(void) {
-	check_fd_output(wrapper_putnbr, &(int){2147483647}, "2147483647");
-}
-
-static void	test_ft_putnbr_fd(void) {
-	const t_test	tests[] = {
-		{"42", ft_putnbr_42_test},
-		{"-42", ft_putnbr_minus_42_test},
-		{"0", ft_putnbr_zero_test},
-		{"INT_MIN", ft_putnbr_int_min_test},
-		{"INT_MAX", ft_putnbr_int_max_test}
-	};
-
-	run_tests("ft_putnbr_fd", tests, ARRAY_SIZE(tests));
-}
-
-/* ************************************************************************** */
-/*                                 MAIN                                       */
-/* ************************************************************************** */
+static const t_test	g_fd_tests[] = {
+	{"ft_putchar_fd: every byte from 0 to 255", putchar_fd_test},
+	{"ft_putstr_fd: empty, 9999 chars", putstr_fd_test},
+	{"ft_putendl_fd", putendl_fd_test},
+	{"ft_putnbr_fd: 0, ±1, INT_MIN, INT_MAX", putnbr_fd_test},
+	{"ft_putstr_fd, ft_putendl_fd with NULL", put_null_test, UB_SAFE},
+};
 
 int	main(void) {
-	test_char_func("ft_isalpha", ft_isalpha, isalpha, 1);
-	test_char_func("ft_isdigit", ft_isdigit, isdigit, 1);
-	test_char_func("ft_isalnum", ft_isalnum, isalnum, 1);
-	test_char_func("ft_isascii", ft_isascii, isascii, 1);
-	test_char_func("ft_isprint", ft_isprint, isprint, 1);
-	test_ft_strlen();
-	test_ft_memset();
-	test_ft_bzero();
-	test_ft_memcpy();
-	test_ft_memmove();
-	test_ft_strlcpy();
-	test_ft_strlcat();
-	test_char_func("ft_toupper", ft_toupper, toupper, 0);
-	test_char_func("ft_tolower", ft_tolower, tolower, 0);
-	test_ft_strchr();
-	test_ft_strrchr();
-	test_ft_strncmp();
-	test_ft_memchr();
-	test_ft_memcmp();
-	test_ft_strnstr();
-	test_ft_atoi();
-	test_ft_calloc();
-	test_ft_strdup();
-	test_ft_substr();
-	test_ft_strjoin();
-	test_ft_strtrim();
-	test_ft_split();
-	test_ft_itoa();
-	test_ft_strmapi();
-	test_ft_striteri();
-	test_ft_putchar_fd();
-	test_ft_putstr_fd();
-	test_ft_putendl_fd();
-	test_ft_putnbr_fd();
-	return (g_tests_failed ? 1 : 0);
+	RUN_GROUP("characters", g_char_tests);
+	RUN_GROUP("memory", g_memory_tests);
+	RUN_GROUP("strings", g_string_tests);
+	RUN_GROUP("allocations", g_alloc_tests);
+	RUN_GROUP("new strings", g_new_string_tests);
+	RUN_GROUP("file descriptors", g_fd_tests);
+	return fairy_summary();
 }

@@ -3,186 +3,293 @@
 int	g_malloc_wrap_enabled = 0;
 int	g_malloc_count;
 int	g_malloc_fail_at;
-int	g_tests_failed = 0;
 
-// Most recent allocations, so tests can check the size of a returned buffer
+/*
+ * The latest allocations, so that a test can check the size of a result. The
+ * addresses are kept inverted: Valgrind would otherwise find them here and
+ * call a leaked block "still reachable" instead of "definitely lost".
+ */
 static struct {
-	void	*ptr;
-	size_t	size;
-}				g_allocs[128];
-static size_t	g_allocs_count;
+	uintptr_t	inverted;
+	size_t		size;
+}				g_allocs[256];
+static size_t	g_nallocs;
 
+/*
+ * With -Wl,--wrap=malloc, every malloc of the library goes through here: the
+ * n-th one (g_malloc_fail_at) can return NULL, and each size is recorded.
+ */
 void	*__wrap_malloc(size_t size) {
+	void	*ptr;
+
 	if (g_malloc_wrap_enabled && ++g_malloc_count == g_malloc_fail_at)
 		return NULL;
-	void	*ptr = __real_malloc(size);
-	size_t	i = g_allocs_count++ % ARRAY_SIZE(g_allocs);
-
-	g_allocs[i].ptr = ptr;
-	g_allocs[i].size = size;
+	ptr = __real_malloc(size);
+	g_allocs[g_nallocs % ARRAY_SIZE(g_allocs)].inverted = ~(uintptr_t)ptr;
+	g_allocs[g_nallocs++ % ARRAY_SIZE(g_allocs)].size = size;
 	return ptr;
 }
 
-// Size requested by the latest malloc that returned ptr, 0 if ptr was not malloc'd
+/* The size malloc'd for ptr, 0 if it does not come from a recent malloc. */
 size_t	alloc_size(void *ptr) {
-	for (size_t i = 1; i <= ARRAY_SIZE(g_allocs) && i <= g_allocs_count; i++)
-		if (g_allocs[(g_allocs_count - i) % ARRAY_SIZE(g_allocs)].ptr == ptr)
-			return g_allocs[(g_allocs_count - i) % ARRAY_SIZE(g_allocs)].size;
+	for (size_t i = 1; i <= ARRAY_SIZE(g_allocs) && i <= g_nallocs; i++)
+		if (g_allocs[(g_nallocs - i) % ARRAY_SIZE(g_allocs)].inverted == ~(uintptr_t)ptr)
+			return g_allocs[(g_nallocs - i) % ARRAY_SIZE(g_allocs)].size;
 	return 0;
 }
 
-int	all_tests_passed(const int *passed, const size_t num_tests) {
-	for (size_t i = 0; i < num_tests; i++) {
-		if (!passed[i])
-			return 0;
+/* s quoted, non-printable bytes as \xHH, cut after 40 characters. Four
+ * buffers in turn: up to four show() in one message. */
+const char	*show(const char *s) {
+	static char	bufs[4][200];
+	static int	turn;
+	char		*out = bufs[turn++ % 4];
+	size_t		n = 1;
+	size_t		i;
+
+	if (!s)
+		return "NULL";
+	out[0] = '"';
+	for (i = 0; s[i] && i < 40; i++) {
+		unsigned char	c = s[i];
+
+		if (c == '\n' || c == '\t' || c == '"' || c == '\\')
+			n += sprintf(out + n, "\\%c", c == '\n' ? 'n' : c == '\t' ? 't' : c);
+		else if (isprint(c))
+			out[n++] = c;
+		else
+			n += sprintf(out + n, "\\x%02x", c);
 	}
-	return 1;
+	strcpy(out + n, s[i] ? "\"…" : "\"");
+	return out;
 }
 
-void	del_func_dummy(void *content) {
-	(void)content;
+/* A malloc'd copy of expected, '\0' included, else fails. */
+void	check_str(const char *call, char *got, const char *expected) {
+	EXPECT(got, "%s: got NULL, expected %s", call, show(expected));
+	EXPECT(!strcmp(got, expected), "%s: got %s, expected %s", call, show(got), show(expected));
+	EXPECT(alloc_size(got) > strlen(expected), "%s: %s fits in %zu malloc'd bytes, it needs %zu",
+		call, show(got), alloc_size(got), strlen(expected) + 1);
 }
 
-#include <stdlib.h>
+/* The n bytes of got must be those of expected, else fails on the first. */
+void	expect_same(const char *call, const void *got, const void *expected, size_t n) {
+	const unsigned char	*g = got;
+	const unsigned char	*e = expected;
 
-void	*map_func_dynamic_content(void *content) {
-	int	*new = malloc(sizeof(int));
-
-	if (!new)
-		return NULL;
-	*new = *(int *)content * 2;
-	return new;
-}
-
-void	*map_func_shared_content(void *content) {
-	return content;
-}
-
-void	safe_free_arr(char ***arr) {
-	if (*arr) {
-		for (int i = 0; (*arr)[i]; i++) {
-			free((*arr)[i]);
-			(*arr)[i] = NULL;
-		}
-		free(*arr);
-		*arr = NULL;
-	}
-}
-
-#include <stdio.h>
-
-void	print_test_results(char *function_name, const size_t num_tests, const char *tests[], const int passed[]) {
-	printf("\n========================================\n");
-	printf("%s\n", function_name);
-	printf("========================================\n");
-	for (size_t i = 0; i < num_tests; i++) {
-		printf("%s" RESET "  Test %s\n", passed[i] ? GREEN "[OK]" : RED "[KO]", tests[i]);
-		if (!passed[i])
-			g_tests_failed++;
-	}
-}
-
-void	error_exit(char *msg) {
-	perror(msg);
-	exit(EXIT_FAILURE);
+	for (size_t i = 0; i < n; i++)
+		EXPECT(g[i] == e[i], "%s: byte %zu is 0x%02x, expected 0x%02x", call, i, g[i], e[i]);
 }
 
 void	*xmalloc(size_t size) {
 	void	*ptr = malloc(size);
 
-	if (ptr)
-		return ptr;
-	error_exit("libft-fairy: malloc failed");
-	return NULL;
+	if (!ptr)
+		die("libft-fairy: malloc");
+	return ptr;
 }
 
-#include <string.h>
+/* A list of n nodes whose contents are malloc'd ints 1, 2... n. */
+t_list	*make_list(int n) {
+	t_list	*head = NULL;
 
-// Aborts unless s is a malloc'd copy of expected, big enough for its '\0', then frees s
-void	check_str(char *s, const char *expected) {
-	if (!s || strcmp(s, expected) || alloc_size(s) < strlen(expected) + 1)
-		abort();
-	free(s);
-}
-
-// Builds the list c1 -> c2 -> c3, with malloc'd contents (or static ones if use_static)
-t_list	*create_test_list(int c1, int c2, int c3, int use_static) {
-	static int	statics[3];
-	const int	values[3] = {c1, c2, c3};
-	t_list		*head = NULL;
-
-	for (int i = 2; i >= 0; i--) {
+	while (n > 0) {
 		t_list	*node = xmalloc(sizeof(t_list));
 
-		node->content = use_static ? &statics[i] : xmalloc(sizeof(int));
-		*(int *)node->content = values[i];
+		node->content = xmalloc(sizeof(int));
+		*(int *)node->content = n--;
 		node->next = head;
 		head = node;
 	}
 	return head;
 }
 
-#include <signal.h>
-#include <unistd.h>
-#include <sys/wait.h>
+void	free_list(t_list *lst) {
+	while (lst) {
+		t_list	*next = lst->next;
 
-static pid_t	xwaitpid(pid_t pid, int *status, int options)
-{
-	pid_t    ret = waitpid(pid, status, options);
-	if (ret == -1)
-		error_exit("libft-fairy: waitpid failed");
-	return ret;
+		free(lst->content);
+		free(lst);
+		lst = next;
+	}
 }
 
-// Runs test_func in a child process, returns 0 if it returned normally, else the signal that killed it
-static int	forked_test(void (*test_func)(void)) {
-	pid_t	pid;
-	int		status;
+/* ************************************************************************** */
+/*                     undefined behaviour: crash or not                      */
+/* ************************************************************************** */
 
-	fflush(stdout);
+static enum e_ub	g_ub;
+
+static void	on_crash(int sig) {
+	static const char	msg[] = "⚠ crashes: undefined behaviour, but evaluators often test it\n";
+
+	(void)sig;
+	if (g_ub == UB_CRASH)
+		_exit(0);
+	if (write(STDERR_FILENO, msg, sizeof(msg) - 1) < 0)
+		_exit(1);
+	_exit(2);
+}
+
+static void	run_test(const t_test *t) {
+	g_ub = t->ub;
+	if (t->ub) {
+		signal(SIGSEGV, on_crash);
+		signal(SIGBUS, on_crash);
+	}
+	t->fn();
+	if (t->ub == UB_CRASH)
+		warning("does not crash where the libc does: undefined behaviour, either is fine");
+}
+
+/* ═══════════════════════════════ fairy core ═══════════════════════════════ */
+/* Identical in libft-fairy, printf-fairy and gnl-fairy: every test runs in a */
+/* child process, so a crash or an infinite loop only fails that test. What   */
+/* the child writes (fail and warning lines, sanitizer reports, glibc's own   */
+/* "double free" messages) is shown under the test when it did not pass.      */
+
+static int	g_count[3];	/* tests passed, failed, passed with warnings */
+static int	g_warned;	/* in the child: warning() was called */
+static int	g_timeout = TEST_TIMEOUT;	/* 1 second once a test hung */
+int			g_lenient = 0;	/* outside the subject: a failure only warns */
+
+void	die(const char *what) {
+	perror(what);
+	exit(EXIT_FAILURE);
+}
+
+static void	vreport(const char *tag, const char *fmt, va_list ap) {
+	fprintf(stderr, "%s ", tag);
+	vfprintf(stderr, fmt, ap);
+	fputc('\n', stderr);
+}
+
+/* Fails the running test: reason shown under it. */
+void	fail(const char *fmt, ...) {
+	va_list	ap;
+
+	va_start(ap, fmt);
+	vreport("↳", fmt, ap);
+	va_end(ap);
+	_exit(1);
+}
+
+/* Flags something debatable: the test still passes, the reason is shown. */
+void	warning(const char *fmt, ...) {
+	va_list	ap;
+
+	va_start(ap, fmt);
+	vreport("⚠", fmt, ap);
+	va_end(ap);
+	g_warned = 1;
+}
+
+/* Runs one test in a child: 0 passed, 1 failed, 2 warned. Its output in log. */
+static int	fork_test(const t_test *t, char *log, size_t size) {
+	static int	fd = -1;
+	pid_t		pid;
+	int			status;
+	ssize_t		n;
+	size_t		len;
+
+	if (fd < 0) {
+		FILE	*f = tmpfile();
+
+		if (!f)
+			die("fairy: tmpfile");
+		fd = fileno(f);
+	}
+	if (ftruncate(fd, 0) < 0 || lseek(fd, 0, SEEK_SET) < 0)
+		die("fairy: tmpfile");
+	fflush(NULL);
 	pid = fork();
-	if (pid == -1)
-		error_exit("libft-fairy: fork failed");
+	if (pid < 0)
+		die("fairy: fork");
 	if (!pid) {
-		alarm(TEST_TIMEOUT);
-		test_func();
-		exit(EXIT_SUCCESS);
+		dup2(fd, STDOUT_FILENO);
+		dup2(fd, STDERR_FILENO);
+		alarm(g_timeout);
+		run_test(t);
+		_exit(g_warned ? 2 : 0);
 	}
-	xwaitpid(pid, &status, 0);
-	if (WIFSIGNALED(status))
-		return WTERMSIG(status);
-	return 0;
-}
-
-static const char	*failure_reason(int sig) {
-	if (!sig)
-		return "did not crash";
-	if (sig == SIGALRM)
-		return "timeout";
-	if (sig == SIGABRT)
-		return "wrong result";
-	return strsignal(sig);
-}
-
-// Forks every test (the malloc wrapper state is set before forking, so each child inherits it)
-// and prints the results if a test failed or in verbose mode
-void	run_tests(char *function_name, const t_test *tests, const size_t num_tests) {
-	const char	*names[num_tests];
-	char		labels[num_tests][128];
-	int			passed[num_tests];
-
-	for (size_t i = 0; i < num_tests; i++) {
-		g_malloc_count = 0;
-		g_malloc_fail_at = tests[i].fail_at;
-		int sig = forked_test(tests[i].func);
-		passed[i] = tests[i].crash ? sig && sig != SIGALRM : !sig;
-		names[i] = tests[i].name;
-		if (!passed[i]) {
-			snprintf(labels[i], sizeof(labels[i]), "%s  (%s)", tests[i].name, failure_reason(sig));
-			names[i] = labels[i];
-		}
+	if (waitpid(pid, &status, 0) < 0)
+		die("fairy: waitpid");
+	n = pread(fd, log, size - 1, 0);
+	len = n > 0 ? (size_t)n : 0;
+	log[len] = '\0';
+	if (WIFEXITED(status))
+		return WEXITSTATUS(status) == 2 ? 2 : WEXITSTATUS(status) != 0;
+	if (WTERMSIG(status) != SIGALRM)
+		snprintf(log + len, size - len, "↳ crashed: %s\n", strsignal(WTERMSIG(status)));
+	else {
+		snprintf(log + len, size - len, "↳ timeout after %ds (infinite loop?)%s\n", g_timeout,
+			g_timeout == TEST_TIMEOUT ? "" : ", cut short since a test hung");
+		g_timeout = 1;
 	}
-	g_malloc_fail_at = 0;
-	if (!all_tests_passed(passed, num_tests) || VERBOSE)
-		print_test_results(function_name, num_tests, names, passed);
+	return 1;
 }
+
+void	section(const char *title) {
+	int	n = WIDTH - 4 - (int)strlen(title);
+
+	printf("\n" DIM "──" RESET " " BOLD "%s" RESET " " DIM, title);
+	for (int i = 0; i < (n > 3 ? n : 3); i++)
+		fputs("─", stdout);
+	puts(RESET);
+}
+
+/* Prints a test's output indented, without the "==pid==" prefixes, the "====="
+ * rulers and the shadow memory map of sanitizer reports. */
+static void	print_log(const char *log) {
+	const char	*end;
+	const char	*p;
+
+	for (; *log; log = *end ? end + 1 : end) {
+		end = strchr(log, '\n');
+		if (!end)
+			end = log + strlen(log);
+		p = log + strspn(log, "=");
+		if (p == end)
+			continue ;
+		if (p - log == 2 && isdigit(*p) && *(p += strspn(p, "0123456789")) == '=' && p[1] == '=')
+			log = p + 2 + (p[2] == ' ');
+		if (!strncmp(log, "Shadow bytes around", 19))
+			return ;
+		printf("     %.*s\n", (int)(end - log), log);
+	}
+}
+
+/* Runs a group of tests; prints those that did not pass (all in VERBOSE). */
+void	run_group(const char *title, const t_test *tests, size_t n) {
+	static const char	*tags[] = {GREEN "[OK]", RED "[KO]", YELLOW "[OK]", YELLOW "[KO]"};
+	static char			log[16384];
+	int					shown = 0;
+	int					res;
+
+	for (size_t i = 0; i < n; i++) {
+		res = fork_test(&tests[i], log, sizeof(log));
+		if (res == 1 && g_lenient)
+			res = 3;
+		g_count[res == 3 ? 2 : res]++;
+		if (res == 0 && !VERBOSE)
+			continue ;
+		if (!shown++)
+			section(title);
+		printf("%s" RESET " %s\n", tags[res], tests[i].name);
+		print_log(log);
+	}
+}
+
+/* Hands the counts to run.sh; returns the binary's exit status: 0, 1 or 2. */
+int	fairy_summary(void) {
+	const char	*path = getenv("FAIRY_STATS");
+	FILE		*f = path ? fopen(path, "a") : NULL;
+
+	if (f) {
+		fprintf(f, "%d %d %d\n", g_count[0] + g_count[2], g_count[1], g_count[2]);
+		fclose(f);
+	}
+	return g_count[1] ? 1 : g_count[2] ? 2 : 0;
+}
+
+/* ══════════════════════════════ end of core ═══════════════════════════════ */

@@ -1,81 +1,115 @@
 #include "libft_fairy.h"
-#include <stdlib.h>
 
-static char	mapi_func(unsigned int i, char c) {
-	return c + i;
+/*
+ * Run under Valgrind: any leak, invalid access or use of an uninitialised
+ * value fails. Every allocating function runs once normally, then with each
+ * of its mallocs failing in turn: what it allocated before must be freed.
+ *
+ * "./leak_tests lstmap" runs only ft_lstmap with an f that allocates: when a
+ * node's malloc fails, the content f just made must go through del. Most
+ * evaluations and the Moulinette skip it, so run.sh only warns about it.
+ */
+
+#define EACH_FAILING(call, release) \
+	for (int k_ = 1; ; k_++) \
+	{ \
+		void	*r_; \
+		g_malloc_count = 0; \
+		g_malloc_fail_at = k_; \
+		g_malloc_wrap_enabled = 1; \
+		r_ = (void *)(call); \
+		g_malloc_wrap_enabled = 0; \
+		release(r_); \
+		if (g_malloc_count < k_) \
+			break ; \
+	}
+
+static void	free_split(void *p) {
+	char	**words = p;
+
+	for (size_t i = 0; words && words[i]; i++)
+		free(words[i]);
+	free(words);
 }
 
-static void	leak_test_ft_calloc(void) {
-	void	*ptr = ft_calloc(10, sizeof(int));
-
-	free(ptr);
+static void	free_lst(void *p) {
+	free_list(p);
 }
 
-static void	leak_test_ft_strdup(void) {
-	char	*dup = ft_strdup("Hello World");
+static void	*double_it(void *content) {
+	int	*n = malloc(sizeof(int));
 
-	free(dup);
+	if (n)
+		*n = *(int *)content * 2;
+	return n;
 }
 
-static void	leak_test_ft_substr(void) {
-	char	*sub1 = ft_substr("Hello World", 0, 5);
-	//char	*sub2 = ft_substr("hola", ~(unsigned int)0, ~(size_t)0);
-
-	free(sub1);
-	//free(sub2);
+static void	*same(void *content) {
+	return content;
 }
 
-static void	leak_test_ft_strjoin(void) {
-	char	*joined = ft_strjoin("Hello", " World");
-
-	free(joined);
+static void	nothing(void *content) {
+	(void)content;
 }
 
-static void	leak_test_ft_strtrim(void) {
-	char	*trimmed = ft_strtrim("   Hello World   ", " ");
-
-	free(trimmed);
+static char	upper(unsigned int i, char c) {
+	(void)i;
+	return ft_toupper(c);
 }
 
-static void	ft_split_malloc_fail_test(void) {
-	g_malloc_count = 0;
-	++g_malloc_fail_at;
-	ft_split("Hello World Test", ' ');
+/* Frees the nodes of a list whose contents belong to another one. */
+static void	free_nodes(void *p) {
+	t_list	*lst = p;
+
+	while (lst) {
+		t_list	*next = lst->next;
+
+		free(lst);
+		lst = next;
+	}
 }
 
-static void	leak_test_ft_split(void) {
-	char	**arr = ft_split("Hello World Test 42", ' ');
-
-	safe_free_arr(&arr);
-	g_malloc_wrap_enabled = 1;
-	g_malloc_fail_at = 0;
-	for (int i = 0; i < 4; i++)
-		ft_split_malloc_fail_test();
-	g_malloc_wrap_enabled = 0;
+static void	strings(void) {
+	EACH_FAILING(ft_calloc(10, sizeof(int)), free);
+	EACH_FAILING(ft_strdup("Hello World"), free);
+	EACH_FAILING(ft_substr("Hello World", 0, 5), free);
+	EACH_FAILING(ft_substr("Hello", 10, 5), free);
+	EACH_FAILING(ft_strjoin("Hello", " World"), free);
+	EACH_FAILING(ft_strtrim("   Hello World   ", " "), free);
+	EACH_FAILING(ft_strtrim("xxxx", "x"), free);
+	EACH_FAILING(ft_split("  Hello World  Test 42 ", ' '), free_split);
+	EACH_FAILING(ft_split("", ' '), free_split);
+	EACH_FAILING(ft_itoa(INT_MIN), free);
+	EACH_FAILING(ft_itoa(0), free);
+	EACH_FAILING(ft_strmapi("abc", upper), free);
 }
 
-static void	leak_test_ft_itoa(void) {
-	char	*num1 = ft_itoa(42);
-	char	*num2 = ft_itoa(-2147483648);
+static void	lists(void) {
+	t_list	*lst = make_list(3);
+	t_list	*one = make_list(1);
+	t_list	*two = make_list(2);
 
-	free(num1);
-	free(num2);
+	EACH_FAILING(ft_lstnew(NULL), free);
+	ft_lstdelone(one, free);
+	ft_lstclear(&two, free);
+	free_list(ft_lstmap(lst, double_it, free));
+	EACH_FAILING(ft_lstmap(lst, same, nothing), free_nodes);
+	free_list(lst);
 }
 
-static void	leak_test_ft_strmapi(void) {
-	char	*mapped = ft_strmapi("abc", mapi_func);
+static void	lstmap_dynamic(void) {
+	t_list	*lst = make_list(3);
 
-	free(mapped);
+	EACH_FAILING(ft_lstmap(lst, double_it, free), free_lst);
+	free_list(lst);
 }
 
-int	main(void) {
-	leak_test_ft_calloc();
-	leak_test_ft_strdup();
-	leak_test_ft_substr();
-	leak_test_ft_strjoin();
-	leak_test_ft_strtrim();
-	leak_test_ft_split();
-	leak_test_ft_itoa();
-	leak_test_ft_strmapi();
+int	main(int argc, char **argv) {
+	if (argc > 1 && !strcmp(argv[1], "lstmap")) {
+		lstmap_dynamic();
+		return 0;
+	}
+	strings();
+	lists();
 	return 0;
 }

@@ -5,60 +5,102 @@
 // 📚 Libraries
 // =============================
 # include "libft.h"
+# include <ctype.h>
+# include <limits.h>
+# include <signal.h>
+# include <stdarg.h>
+# include <stdint.h>
+# include <stdio.h>
+# include <stdlib.h>
+# include <string.h>
+# include <unistd.h>
+# include <sys/wait.h>
 
 // =============================
-// 🎨 Global defines
+// 🎨 Global define(s)
 // =============================
-# define GREEN			"\033[0;32m"
-# define RED			"\033[0;31m"
+# define GREEN			"\033[32m"
+# define RED			"\033[31m"
+# define YELLOW			"\033[33m"
+# define BOLD			"\033[1m"
+# define DIM			"\033[2m"
 # define RESET			"\033[0m"
+# define WIDTH			46		// as in run.sh
+# define TEST_TIMEOUT	2		// seconds before a test counts as hanging
 # ifndef VERBOSE
 #  define VERBOSE		0
 # endif
-# define TEST_TIMEOUT	1	// seconds before a forked test is reported as hanging
 
 // =============================
-// 🧩 Types
+// 🧩 Type(s)
 // =============================
-// A forked test: it passes if func returns normally (or crashes, when crash is set).
-// fail_at is the number of the malloc call that will fail (0 = none).
+/*
+ * NULL where a string or a list is expected is undefined behaviour: either
+ * way is fine, so a test marked ub never fails on it, it warns when the
+ * function does not do what most expect. UB_CRASH: the libc crashes there.
+ * UB_SAFE: evaluators often expect the function to survive it.
+ */
+enum e_ub { STRICT, UB_CRASH, UB_SAFE };
+
 typedef struct s_test
 {
 	const char	*name;
-	void		(*func)(void);
-	int			crash;
-	int			fail_at;
+	void		(*fn)(void);
+	enum e_ub	ub;
 }	t_test;
 
 // =============================
-// 🌍 Global variables
+// 🌍 Global variable(s)
 // =============================
 extern int	g_malloc_wrap_enabled;
 extern int	g_malloc_count;
 extern int	g_malloc_fail_at;
-extern int	g_tests_failed;
 
 // =============================
 // 🪄 Macro(s)
 // =============================
 # define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*(arr)))
+# define RUN_GROUP(title, tests) run_group(title, tests, ARRAY_SIZE(tests))
+# define EXPECT(cond, ...) do { if (!(cond)) fail(__VA_ARGS__); } while (0)
+# define SIGN(n) (((n) > 0) - ((n) < 0))
+
+/*
+ * Makes the 1st, then the 2nd... malloc of call fail, until call no longer
+ * reaches that many: whichever allocation fails, call must return NULL.
+ */
+# define EACH_MALLOC_FAILING(call) \
+	for (int k_ = 1; ; k_++) \
+	{ \
+		void	*r_; \
+		g_malloc_count = 0; \
+		g_malloc_fail_at = k_; \
+		g_malloc_wrap_enabled = 1; \
+		r_ = (void *)(call); \
+		g_malloc_wrap_enabled = 0; \
+		if (g_malloc_count < k_) \
+			break ; \
+		EXPECT(!r_, "%s returned %p when malloc #%d failed, expected NULL", #call, r_, k_); \
+	}
 
 // =============================
-// 📋 Function prototypes
+// 📋 Function prototype(s)
 // =============================
 void		*__real_malloc(size_t size);
 void		*__wrap_malloc(size_t size);
 size_t		alloc_size(void *ptr);
-int			all_tests_passed(const int *passed, const size_t num_tests);
-void		del_func_dummy(void *content);
-void		*map_func_dynamic_content(void *content);
-void		*map_func_shared_content(void *content);
-void		safe_free_arr(char ***arr);
-void		print_test_results(char *function_name, const size_t num_tests, const char *tests[], const int passed[]);
-void		run_tests(char *function_name, const t_test *tests, const size_t num_tests);
-void		check_str(char *s, const char *expected);
-void		error_exit(char *msg);
+const char	*show(const char *s);
+void		expect_same(const char *call, const void *got, const void *expected, size_t n);
+void		check_str(const char *call, char *got, const char *expected);
 void		*xmalloc(size_t size);
-t_list		*create_test_list(int c1, int c2, int c3, int use_static);
+t_list		*make_list(int n);
+void		free_list(t_list *lst);
+
+void		die(const char *what) __attribute__((noreturn));
+void		fail(const char *fmt, ...)
+			__attribute__((noreturn, format(printf, 1, 2)));
+void		warning(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void		section(const char *title);
+void		run_group(const char *title, const t_test *tests, size_t n);
+int			fairy_summary(void);
 
 #endif //LIBFT_FAIRY_H

@@ -1,267 +1,134 @@
 # 🧚 libft-fairy
 
-A comprehensive tester for 42's **libft** project (subject v19.3, where the linked list functions are part of the mandatory part), featuring memory leak detection, edge case testing, and rigorous validation.
+A tester for 42's **libft** (subject v19.3, where the linked lists are mandatory). Every function swept against the libc (or a BSD reference where glibc has none), allocation sizes checked, each `malloc` failing in turn, Valgrind, plus every check the subject asks for, in about 2 seconds.
 
-## ✨ Features
+Part of a trio with [printf-fairy](https://github.com/sys-harmony/printf-fairy) and [gnl-fairy](https://github.com/sys-harmony/gnl-fairy): same display, same verdicts, same engine.
 
-- ✅ Complete tests for all functions (Part 1, 2 and 3)
-- 🔍 Automatic verification with **norminette**
-- 📖 README.md requirements check (italic first line, Description / Instructions / Resources sections)
-- 📋 Prototype validation in libft.h, done by the compiler
-- ⚙️ Makefile rules verification (NAME, all, clean, fclean, re) and relink detection
-- 🔧 Compiler and flags check (cc -Wall -Wextra -Werror) on the commands make really runs
-- 🔎 External functions, global variables and non-static helpers detection
-- 💧 Memory leak detection with **Valgrind**
-- 📏 Allocation size check (catches the classic missing `+ 1` for the `'\0'`)
-- 🚨 Edge case testing (NULL, overflow, boundary cases)
-- 🧪 Malloc failure simulation for robustness
-- ⏱️ Per-test timeout, so an infinite loop only fails the test that hangs
-- 📊 Clear and colorful output, with the reason of each failure
-- 🔇 Optional verbose mode for detailed results
+## 🚀 Usage
 
-## 📋 Prerequisites
-
-Before using libft-fairy, make sure you have installed:
-
-- `gcc`
-- `make`
-- `valgrind`
-- `norminette`
-- `bash`
-- `nm` (usually pre-installed)
-
-## 🚀 Installation
-
-1. Clone the repository inside your libft directory:
+Clone it inside your libft repository, then run it:
 
 ```bash
 git clone https://github.com/sys-harmony/libft-fairy.git
+./libft-fairy/run.sh          # failing tests only
+./libft-fairy/run.sh -v       # every test
 ```
 
-2. Navigate to the tester folder:
-
-```bash
-cd libft-fairy
-```
-
-3. Make the script executable:
-
-```bash
-chmod +x run.sh
-```
-
-## 🎯 Usage
-
-### Run all tests
-
-```bash
-./run.sh
-```
-
-### Verbose mode (displays all tests, even passing ones)
-
-```bash
-./run.sh --verbose
-# or
-./run.sh -v
-```
+The exit status is `0` when everything passed (warnings included), `1` otherwise, so it fits in a script or a CI.
 
 ## 📊 Output
 
-The tester displays a comprehensive validation process:
-
 ```
-╔═══════════════════════════╗
-║       LIBFT-FAIRY 🧚      ║
-╚═══════════════════════════╝
+╔════════════════════════════════════════════╗
+║               LIBFT-FAIRY 🧚               ║
+╚════════════════════════════════════════════╝
 
-📝 Checking norm...         Done
-📖 Checking README...        Done
-📑 Checking prototypes...    Done
-🔧 Checking Makefile...      Done
-📦 Building libft...         Done
-🔍 Checking symbols...       Done
-🔨 Building tests...         Done
-🧪 Running tests...          Done
+📂 Files ................................ Done
+📖 README ............................... Done
+📝 Norm ................................. Done
+📋 Prototypes ........................... Done
+🔧 Makefile ............................. Done
+📦 Build ................................ Done
+🔍 Symbols .............................. Done
+🔨 Test build ........................... Done
+🧪 Tests .............................. Failed
 
-========================================
-ft_isalpha
-========================================
-[OK]  Test EOF to 255
-...
+── memory ────────────────────────────────────
+[KO] ft_memmove: every overlap, both ways
+     ↳ ft_memmove(buf + 1, buf + 0, 2): byte 2 is 0x80, expected 0x87
 
-╔═══════════════════════════╗
-║     OH MY, YOU PASSED!    ║
-╚═══════════════════════════╝
+── strings ───────────────────────────────────
+[KO] ft_strncmp: unsigned chars, past '\0', SIZE_MAX
+     ↳ ft_strncmp("", "\x80", 1): got 128, expected a negative value
+[OK] ft_strlen(NULL)
+     ⚠ does not crash where the libc does: undefined behaviour, either is fine
+
+── new strings ───────────────────────────────
+[KO] each malloc failing in turn: NULL, no crash
+     ↳ ft_split("  Hello World  42 ", ' ') returned 0x29e7c4f0 when malloc #2 failed, expected NULL
+
+── valgrind · leak_tests ─────────────────────
+     Invalid free() / delete / delete[] / realloc()
+        at 0x484B27F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+        by 0x401CEF: free_split (leak_tests.c:31)
+      Address 0x4a9f370 is 0 bytes inside a block of size 6 free'd
+        at 0x484B27F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+        by 0x404086: ft_free (ft_split.c:22)
+        by 0x40400D: ft_fill_strs (ft_split.c:61)
+     …
+🧹 Cleanup .............................. Done
+
+╔════════════════════════════════════════════╗
+║            OH NO... YOU FAILED!            ║
+╚════════════════════════════════════════════╝
+   ✘ Tests · 3/69 tests failed · 1.90s
 ```
 
-On failure, details of failed tests will be displayed with their reason, along with Valgrind logs if memory leaks are detected:
+Only what did not pass is listed, each time with its reason: the call, what it gave and what was expected, a crash signal, a timeout, or the Valgrind report, which points to your file and line.
 
-```
-========================================
-ft_split
-========================================
-[OK]  Test basic split
-...
-[KO]  Test malloc fail #2 (word 1)  (Segmentation fault)
-```
+## ⚖️ Failures and warnings
 
-## 🧪 Tests Covered
+A **failure** is a bug or a clear subject violation. A **warning** is something debatable: worth a look, maybe a question from your evaluator, never a failure. A working libft passes.
 
-### Pre-compilation Checks
+`NULL` where a string or a list is expected is undefined behaviour, so these tests never fail. They warn when the function does not do what most expect:
 
-- **Norminette**: Validates the .c and .h files at the root of the repository
-- **README**: Checks the requirements of the subject (first line, required sections)
-- **Prototypes**: The compiler checks every prototype of libft.h against the subject (parameter names and spacing don't matter); `restrict` is forbidden
-- **Makefile**: Checks the required rules, the compiler and flags of the commands `make -n` prints, `-std=c99`, and relinks (`make` run twice)
-- **Symbols**: In every object of libft.a, ensures only allowed external functions are used, and that there is no global variable nor non-static helper
+- Part 1, where the libc crashes (`ft_strlen(NULL)`, `ft_memcpy(buf, NULL, 5)`...): a warning if yours does not crash
+- Part 2 and 3 (`ft_strjoin(NULL, "a")`, `ft_lstclear(NULL, del)`, `f` or `del` NULL...): a warning if yours crashes
 
-### Part 1 & 2 Functions
+An empty list, though, is a valid list: `ft_lstsize(NULL)`, `ft_lstiter(NULL, f)` or `ft_lstmap(NULL, f, del)` must work.
 
-#### Character Classification
-- `ft_isalpha`, `ft_isdigit`, `ft_isalnum`, `ft_isascii`, `ft_isprint`: Compared to the libc for every value from EOF to 255, must return exactly 1 on a match (subject rule)
-- `ft_toupper`/`ft_tolower`: Compared to the libc for every value from EOF to 255
+Other warnings:
 
-#### String Manipulation
-- `ft_strlen`: Length calculation including NULL handling
-- `ft_strchr`/`ft_strrchr`: Character search with unsigned char support
-- `ft_strncmp`: Comparison with SIZE_MAX edge case
-- `ft_strnstr`: Substring search with boundary tests
-- `ft_strlcpy`/`ft_strlcat`: Safe string operations with size limits
+- `ft_lstmap` leaking the content `f` made when a node's `malloc` fails (most evaluations skip it)
+- a public `ft_` function that is not in the subject: `static`, if it is a helper
+- a README that does not look like the subject's description, project files git does not track
+- `norminette` or `valgrind` missing: that check did not run
 
-#### Memory Operations
-- `ft_memset`: Pattern filling with return value check
-- `ft_bzero`: Zero-filling validation
-- `ft_memcpy`: Copy operations with NULL detection
-- `ft_memmove`: Overlap handling (forward/backward)
-- `ft_memchr`: Binary-safe search
-- `ft_memcmp`: Unsigned byte comparison
+## 🧪 What is checked
 
-#### Conversion
-- `ft_atoi`: Integer parsing with whitespace and sign handling
+| Step | What |
+|---|---|
+| 📂 Files | `Makefile`, `libft.h` and `ft_*.c` at the root, nothing else among the graded files (a local, untracked `main.c` is fine); every `.c` compiled by `make` (unused files are forbidden); project files not committed (warning) |
+| 📖 README | there (failure), with the italic first line, *Description*, *Instructions*, *Resources* and how AI was used (warnings) |
+| 📝 Norm | `norminette` on the graded files |
+| 📋 Prototypes | the compiler checks `libft.h` against the 43 prototypes of the subject; no `restrict` |
+| 🔧 Makefile | `$(NAME)`, `all`, `clean`, `fclean`, `re`; `cc -Wall -Wextra -Werror` on every compilation `make -n` shows; no `-std=c99`; `ar`, no `libtool`; no wildcard |
+| 📦 Build | a build from scratch, then `make` again must not relink |
+| 🔍 Symbols | in every object of `libft.a`: the external functions each function may call (`malloc`, `free`, `write`, as the subject lists them), no global variable, no non-static helper, every function of the subject |
+| 🧪 Tests | below |
 
-#### Allocation Functions
-- `ft_calloc`: Zero-initialization with overflow protection, freeable pointer when nmemb or size is 0
-- `ft_strdup`: String duplication with empty string handling
+**Part 1, against the libc:** `ft_is*`, `ft_toupper`, `ft_tolower` for every value from `EOF` to 255 (a class function must return 1); `ft_memset`, `ft_bzero`, `ft_memcpy` at 8 offsets and 0 to 40 bytes; `ft_memmove` for every overlap both ways; `ft_memchr`, `ft_strchr`, `ft_strrchr` for every `c` from -300 to 600; `ft_memcmp`, `ft_strncmp` on unsigned chars, past `'\0'`, up to `SIZE_MAX`; `ft_atoi` on spaces, signs, junk, `INT_MIN`, `INT_MAX`. `ft_strlcpy`, `ft_strlcat` and `ft_strnstr`, missing from glibc, against a reference written after the BSD man pages, for every size. Buffers are compared whole, so a byte written past the end fails.
 
-#### String Creation
-- `ft_substr`: Substring extraction with edge cases
-- `ft_strjoin`: String concatenation with NULL handling
-- `ft_strtrim`: Trimming with multiple character sets
-- `ft_split`: Word splitting with malloc failure simulation
-- `ft_itoa`: Integer to string (including INT_MIN/MAX)
+**Allocations:** `ft_calloc` zeroed, big enough, `NULL` on overflow, a pointer `free()` takes for 0; every returned string is checked against the size actually `malloc`'d, which catches the missing `+ 1`.
 
-#### Iteration
-- `ft_strmapi`: Mapping with index parameter
-- `ft_striteri`: In-place iteration
+**Part 2:** `ft_substr` past the end, with `UINT_MAX` and `SIZE_MAX`; `ft_strjoin`, `ft_strtrim`; `ft_split` with delimiters in a row, `'\0'` and `\xff`, words and array sized right; `ft_itoa` around every power of 10; `ft_strmapi`, `ft_striteri` (index and address of each char); `ft_put*_fd` through a pipe, every byte for `ft_putchar_fd`.
 
-#### File Descriptors
-- `ft_putchar_fd`: Character output
-- `ft_putstr_fd`: String output with NULL handling
-- `ft_putendl_fd`: String with newline
-- `ft_putnbr_fd`: Number output (INT_MIN/MAX)
+**Part 3:** every list function on empty, single and longer lists, `del` and `f` calls counted and ordered, the source of `ft_lstmap` untouched.
 
-### Part 3 Functions
+**`malloc` failing:** each allocating function runs with its 1st, then 2nd... `malloc` failing, until every allocation site has failed once: it must return `NULL` and, under Valgrind, leak nothing.
 
-#### List Operations
-- `ft_lstnew`: Node creation with NULL content
-- `ft_lstadd_front`/`ft_lstadd_back`: List insertion with NULL checks
-- `ft_lstsize`: Size calculation
-- `ft_lstlast`: Last node retrieval
-- `ft_lstdelone`: Single node deletion with custom del function
-- `ft_lstclear`: Complete list cleanup
-- `ft_lstiter`: Iteration with function application
-- `ft_lstmap`: Mapping with malloc failure handling
+## 🔍 How it works
 
-### Edge Cases Tested
+- Every test runs in its own process with a timeout: a crash or an infinite loop fails that test only, and the remaining timeouts shrink to 1 second. A test on undefined behaviour catches the crash itself.
+- `-Wl,--wrap=malloc` routes every `malloc` of the library through the tester, which records the sizes and can make the n-th one fail.
+- The sources are built again with `-g` for the tests, in parallel, so that reports point to their lines; the test binaries run in parallel too, norminette from the start.
 
-- ❌ NULL pointers for all applicable functions
-- 🔢 Boundary values (INT_MIN, INT_MAX, UINT_MAX, SIZE_MAX)
-- 🔤 Non-ASCII characters (127, 128, 200, 255, -1)
-- 📏 Empty strings and zero sizes
-- 🔄 Memory overlaps (ft_memmove forward/backward)
-- 💥 Simulated malloc failures (multiple scenarios per function)
-- 🧩 Consecutive delimiters in ft_split
-- 🎯 Start index beyond string length (ft_substr)
-- 📊 Zero count/size in ft_calloc
-- 🔗 List operations with NULL parameters
+## 📋 Requirements
 
-### Memory Leak Tests
+Linux with `bash` 4.3+, `cc`, `make`, `nm`, `valgrind`, `norminette`, `perl` and coreutils.
 
-Dedicated leak tests for:
-- All allocation functions (ft_calloc, ft_strdup, ft_substr, ft_strjoin, ft_strtrim, ft_split, ft_itoa, ft_strmapi)
-- List functions (ft_lstnew, ft_lstdelone, ft_lstclear)
-- ft_lstmap with three content scenarios:
-  - Static content
-  - Shared content
-  - Dynamic content – commented out by default (not tested by Moulinette)
-- Malloc failure cleanup validation
-
-## 📁 Project Structure
+## 📁 Structure
 
 ```
 libft-fairy/
-├── run.sh                    # Main test orchestrator
-├── basic_tests.c             # Part 1 & 2 function tests
-├── basic_tests_lists.c       # Part 3 (linked list) function tests
-├── leak_tests.c              # Leak tests (Part 1 & 2)
-├── leak_tests_lists.c        # Leak tests (Part 3)
-├── utils.c                   # Utility functions and malloc wrapper
-├── libft_fairy.h             # Header file
-└── README.md                 # This file
+├── run.sh               # the steps; its "fairy core" is shared by the trio
+├── utils.c              # malloc wrapper, allocation sizes, helpers; the C fairy core
+├── libft_fairy.h        # EXPECT, EACH_MALLOC_FAILING
+├── basic_tests.c        # Part 1 and 2
+├── basic_tests_lists.c  # Part 3
+└── leak_tests.c         # under Valgrind
 ```
-
-## 🔍 Advanced Features
-
-### Malloc Failure Simulation
-
-The tester uses a custom malloc wrapper (`__wrap_malloc`) to simulate allocation failures at specific points, ensuring your functions return NULL on malloc errors and don't leak memory on failure. The wrapper also records the size of each allocation, so a returned string must fit in the memory allocated for it.
-
-### Forked Tests
-
-Every test runs in a separate process with a timeout, so a crash or an infinite loop only fails that test. A failed test shows why: `wrong result`, the signal that killed it (`Segmentation fault`...), `timeout`, or `did not crash` for tests expecting a crash.
-
-### Symbol Validation
-
-Every object of libft.a is checked with `nm`, wherever the .o files are built and whatever functions each file holds:
-- Only authorized external functions: `malloc` (allocating functions), `free` (`ft_split`, `ft_lstdelone`, `ft_lstclear`, `ft_lstmap`), `write` (`ft_put*_fd`), none for the others
-- No global variable, no non-static helper function
-- Every function of the subject is built by `make` (there is no bonus part in v19.3, Part 3 is mandatory)
-
-## 🐛 Debugging
-
-If a test fails:
-
-1. **Verbose mode**: Run `./run.sh -v` to see all test details
-2. **Valgrind logs**: Complete output displayed for memory issues
-3. **Norminette**: Specific errors shown with file and line
-4. **Prototype errors**: Exact expected signatures displayed
-
-## ⚠️ Limitations
-
-- Tested only on Linux (uses `fork`, `nm`, and Valgrind)
-- Requires specific directory structure (tester in libft subfolder)
-- May produce false positives if non-standard implementation approaches are used
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to:
-
-- Open an issue to report a bug
-- Suggest new edge cases
-- Improve test coverage
-- Enhance documentation
-
-## 📜 License
-
-This project is free to use for educational purposes.
 
 ## 💖 Credits
 
-Created with ✨ by **sys-harmony**.
-
-Special thanks to the 42 community for feedback and suggestions.
-
----
-
-*If libft-fairy helped you validate your libft, don't forget to leave a ⭐ on the repo!*
+Created with ✨ by **sys-harmony**. Special thanks to the 42 community for feedback and suggestions.
