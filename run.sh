@@ -367,7 +367,9 @@ rule() { grep -qE "^([^#:=]+[[:space:]])?($1)([[:space:]][^#:=]*)?[[:space:]]*:(
 issues=()
 rule '\$[({]NAME[)}]|libft\.a' || issues+=("no \$(NAME) rule")
 for r in all clean fclean re; do rule "$r" || issues+=("no '$r' rule"); done
-grep -vE '^\s*#' Makefile | grep -qE '\$\((wildcard|shell)|^[^#[:space:]][^#]*=[^#]*\*\.c' \
+# $(wildcard) and $(shell) count only when they list .c files: a progress bar
+# may well use them
+grep -vE '^\s*#' Makefile | grep -qE '\$\((wildcard|shell)\b.*\.c\b|^[^#[:space:]][^#]*=[^#]*\*\.c' \
     && issues+=("sources listed with a wildcard: name each file")
 COMPILES=$(grep -E '(^|\s)-c(\s|$)' <<< "$CMDS")
 if [[ -z $COMPILES ]]; then
