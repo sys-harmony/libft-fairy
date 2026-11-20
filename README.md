@@ -1,6 +1,6 @@
 # 🧚 libft-fairy
 
-A tester for 42's **libft** (subject v19.3, where the linked lists are mandatory). Every function swept against the libc (or a BSD reference where glibc has none), allocation sizes checked, each `malloc` failing in turn, Valgrind, plus every check the subject asks for, in about 2 seconds.
+A tester for 42's **libft** (subject v19.3, where the linked lists are mandatory). Every function swept against the libc (or a BSD reference where glibc has none), allocation sizes checked, each `malloc` failing in turn, Valgrind, plus every check the subject asks for, in about 3 seconds.
 
 Part of a trio with [printf-fairy](https://github.com/sys-harmony/printf-fairy) and [gnl-fairy](https://github.com/sys-harmony/gnl-fairy): same display, same verdicts, same engine.
 
@@ -29,6 +29,7 @@ The exit status is `0` when everything passed (warnings included), `1` otherwise
 📋 Prototypes ........................... Done
 🔧 Makefile ............................. Done
 📦 Build ................................ Done
+🧼 Clean rules .......................... Done
 🔍 Symbols .............................. Done
 🔨 Test build ........................... Done
 🧪 Tests .............................. Failed
@@ -94,6 +95,7 @@ Other warnings:
 | 📋 Prototypes | the compiler checks `libft.h` against the 43 prototypes of the subject; no `restrict` |
 | 🔧 Makefile | `$(NAME)`, `all`, `clean`, `fclean`, `re`; `cc -Wall -Wextra -Werror` on every compilation `make -n` shows; no `-std=c99`; `ar`, no `libtool`; no wildcard |
 | 📦 Build | a build from scratch, then `make` again must not relink |
+| 🧼 Clean rules | in a copy of the project: `make clean` removes every object (a warning if it removes `libft.a` too), `make re` rebuilds the library, `make fclean` leaves no object and no library |
 | 🔍 Symbols | in every object of `libft.a`: the external functions each function may call (`malloc`, `free`, `write`, as the subject lists them), no global variable, no non-static helper, every function of the subject |
 | 🧪 Tests | below |
 
@@ -111,7 +113,7 @@ Other warnings:
 
 - Every test runs in its own process with a timeout: a crash or an infinite loop fails that test only, and the remaining timeouts shrink to 1 second. A test on undefined behaviour catches the crash itself.
 - `-Wl,--wrap=malloc` routes every `malloc` of the library through the tester, which records the sizes and can make the n-th one fail.
-- The sources `make` compiles are built again with `-g` for the tests, in parallel, so that reports point to their lines; the test binaries run in parallel too, norminette from the start. A test file that does not link names the functions it misses, and the others still run.
+- The sources `make` compiles are built again with `-g` for the tests, in parallel, so that reports point to their lines; the test binaries run in parallel too, norminette from the start. The clean rules are tried in a copy of the project, beside the other steps. A test file that does not link names the functions it misses, and the others still run.
 
 ## 📋 Requirements
 
