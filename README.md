@@ -111,7 +111,7 @@ Other warnings:
 
 - Every test runs in its own process with a timeout: a crash or an infinite loop fails that test only, and the remaining timeouts shrink to 1 second. A test on undefined behaviour catches the crash itself.
 - `-Wl,--wrap=malloc` routes every `malloc` of the library through the tester, which records the sizes and can make the n-th one fail.
-- The sources `make` compiles are built again with `-g` for the tests, in parallel, so that reports point to their lines; the test binaries run in parallel too, norminette from the start.
+- The sources `make` compiles are built again with `-g` for the tests, in parallel, so that reports point to their lines; the test binaries run in parallel too, norminette from the start. A test file that does not link names the functions it misses, and the others still run.
 
 ## 📋 Requirements
 

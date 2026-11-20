@@ -454,17 +454,26 @@ for t in $TESTS; do
     job "cc_$t" cc -g -Wall -Wextra -Wno-missing-field-initializers -DVERBOSE=$VERBOSE -I. -no-pie \
         "$TESTER/$t.c" "$TESTER/utils.c" "${LIB[@]}" -o "$TMP/$t" -Wl,--wrap=malloc
 done
+# A test file that does not link (a missing function) fails the step, the
+# others still run
 errors=""
 for t in $TESTS; do
     await "cc_$t"
-    [[ $(rc "cc_$t") -eq 0 ]] || errors+="$t.c:"$'\n'"$(head -n 12 "$TMP/cc_$t.log")"$'\n'
+    [[ $(rc "cc_$t") -eq 0 ]] && continue
+    missing=$(sed -n "s/.*undefined reference to \`\([^']*\)'.*/\1/p" "$TMP/cc_$t.log" | sort -u | xargs)
+    if [[ -n $missing ]]; then errors+="$t.c: not found: $missing"$'\n'
+    else errors+="$t.c:"$'\n'"$(head -n 12 "$TMP/cc_$t.log")"$'\n'; fi
 done
-if [[ -z $errors ]]; then ok; else fail; printf '%s' "$errors" | quote; exit 1; fi
+if [[ -z $errors ]]; then ok; else fail; printf '%s' "$errors" | quote; fi
+built() { [[ $(rc "cc_$1") -eq 0 ]]; }
+built basic_tests || built basic_tests_lists || built leak_tests || exit 1
 
-queue main basic tests "basic_tests" "$TMP/basic_tests"
-queue main lists tests "basic_tests_lists" "$TMP/basic_tests_lists"
-queue main leak memcheck "leak_tests" "$TMP/leak_tests"
-queue main lstmap lenient memcheck "ft_lstmap: f's content on failure (warning)" "$TMP/leak_tests" lstmap
+built basic_tests && queue main basic tests "basic_tests" "$TMP/basic_tests"
+built basic_tests_lists && queue main lists tests "basic_tests_lists" "$TMP/basic_tests_lists"
+if built leak_tests; then
+    queue main leak memcheck "leak_tests" "$TMP/leak_tests"
+    queue main lstmap lenient memcheck "ft_lstmap: f's content on failure (warning)" "$TMP/leak_tests" lstmap
+fi
 
 step 🧪 Tests
 run_queue main
