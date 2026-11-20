@@ -90,7 +90,7 @@ Other warnings:
 | Step | What |
 |---|---|
 | 📂 Files | `Makefile`, `libft.h` and `ft_*.c` at the root, nothing else among the graded files (a local, untracked `main.c` is fine; outside git, a `.c` defining `main()` is left out); every `.c` compiled by `make` (unused files are forbidden); project files not committed, or deleted but still committed (warning) |
-| 📖 README | there (failure), with the italic first line, *Description*, *Instructions*, *Resources* and how AI was used (warnings) |
+| 📖 README | there (failure), with the italic first line, *Description*, *Instructions*, *Resources*, how AI was used and the description of the library (warnings) |
 | 📝 Norm | `norminette` on the graded files |
 | 📋 Prototypes | the compiler checks `libft.h` against the 43 prototypes of the subject; no `restrict` |
 | 🔧 Makefile | `$(NAME)`, `all`, `clean`, `fclean`, `re`; `cc -Wall -Wextra -Werror` on every compilation `make -n` shows; no `-std=c99`; `ar`, no `libtool`; no wildcard |
