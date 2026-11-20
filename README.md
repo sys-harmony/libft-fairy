@@ -101,7 +101,7 @@ Other warnings:
 
 **Allocations:** `ft_calloc` zeroed, big enough, `NULL` on overflow, a pointer `free()` takes for 0; every returned string is checked against the size actually `malloc`'d, which catches the missing `+ 1`.
 
-**Part 2:** `ft_substr` past the end, with `UINT_MAX` and `SIZE_MAX`; `ft_strjoin`, `ft_strtrim`; `ft_split` with delimiters in a row, `'\0'` and `\xff`, words and array sized right; `ft_itoa` around every power of 10; `ft_strmapi`, `ft_striteri` (index and address of each char); `ft_put*_fd` through a pipe, every byte for `ft_putchar_fd`.
+**Part 2:** `ft_substr` past the end, with `UINT_MAX` and `SIZE_MAX`; `ft_strjoin`, `ft_strtrim`; `ft_split` with delimiters in a row, `'\0'` and `\xff`, words and array sized right; `ft_itoa` around every power of 10; `ft_strmapi`, `ft_striteri` (index and address of each char); `ft_put*_fd` through a temp file, every byte for `ft_putchar_fd`.
 
 **Part 3:** every list function on empty, single and longer lists, `del` and `f` calls counted and ordered, the source of `ft_lstmap` untouched.
 
