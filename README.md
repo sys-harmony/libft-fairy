@@ -50,7 +50,7 @@ The exit status is `0` when everything passed (warnings included), `1` otherwise
 ── valgrind · leak_tests ─────────────────────
      Invalid free() / delete / delete[] / realloc()
         at 0x484B27F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
-        by 0x401CEF: free_split (leak_tests.c:31)
+        by 0x401CEF: free_split (leak_tests.c:15)
       Address 0x4a9f370 is 0 bytes inside a block of size 6 free'd
         at 0x484B27F: free (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
         by 0x404086: ft_free (ft_split.c:22)
@@ -124,10 +124,11 @@ Linux with `bash` 4.4+, `cc`, `make`, `nm`, `valgrind`, `norminette`, `perl` and
 libft-fairy/
 ├── run.sh               # the steps; its "fairy core" is shared by the trio
 ├── utils.c              # malloc wrapper, allocation sizes, helpers; the C fairy core
-├── libft_fairy.h        # EXPECT, EACH_MALLOC_FAILING
+├── libft_fairy.h        # EXPECT, EACH_MALLOC_FAILING, EACH_FAILING
 ├── basic_tests.c        # Part 1 and 2
 ├── basic_tests_lists.c  # Part 3
-└── leak_tests.c         # under Valgrind
+├── leak_tests.c         # Part 1 and 2 under Valgrind
+└── leak_tests_lists.c   # Part 3 under Valgrind
 ```
 
 ## 💖 Credits
