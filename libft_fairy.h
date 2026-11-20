@@ -84,6 +84,25 @@ extern int	g_malloc_fail_at;
 		EXPECT(!r_, "%s returned %p when malloc #%d failed, expected NULL", #call, r_, k_); \
 	}
 
+/*
+ * The same under Valgrind, where call may give up: release frees what it
+ * returned, and whatever call allocated before the failure must be freed by
+ * call itself, or Valgrind reports a leak.
+ */
+# define EACH_FAILING(call, release) \
+	for (int k_ = 1; ; k_++) \
+	{ \
+		void	*r_; \
+		g_malloc_count = 0; \
+		g_malloc_fail_at = k_; \
+		g_malloc_wrap_enabled = 1; \
+		r_ = (void *)(call); \
+		g_malloc_wrap_enabled = 0; \
+		release(r_); \
+		if (g_malloc_count < k_) \
+			break ; \
+	}
+
 // =============================
 // 📋 Function prototype(s)
 // =============================

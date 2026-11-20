@@ -451,7 +451,7 @@ if [[ -n $MADE ]]; then
     LIB=("$TMP"/obj/*.o)
     for src in $MADE; do [[ $(rc "g_$src") -eq 0 ]] || LIB=(-L. -lft); done
 fi
-TESTS="basic_tests basic_tests_lists leak_tests"
+TESTS="basic_tests basic_tests_lists leak_tests leak_tests_lists"
 for t in $TESTS; do
     job "cc_$t" cc -g -Wall -Wextra -Wno-missing-field-initializers -DVERBOSE=$VERBOSE -I. -no-pie \
         "$TESTER/$t.c" "$TESTER/utils.c" "${LIB[@]}" -o "$TMP/$t" -Wl,--wrap=malloc
@@ -468,13 +468,14 @@ for t in $TESTS; do
 done
 if [[ -z $errors ]]; then ok; else fail; printf '%s' "$errors" | quote; fi
 built() { [[ $(rc "cc_$1") -eq 0 ]]; }
-built basic_tests || built basic_tests_lists || built leak_tests || exit 1
+built basic_tests || built basic_tests_lists || built leak_tests || built leak_tests_lists || exit 1
 
 built basic_tests && queue main basic tests "basic_tests" "$TMP/basic_tests"
 built basic_tests_lists && queue main lists tests "basic_tests_lists" "$TMP/basic_tests_lists"
-if built leak_tests; then
-    queue main leak memcheck "leak_tests" "$TMP/leak_tests"
-    queue main lstmap lenient memcheck "ft_lstmap: f's content on failure (warning)" "$TMP/leak_tests" lstmap
+built leak_tests && queue main leak memcheck "leak_tests" "$TMP/leak_tests"
+if built leak_tests_lists; then
+    queue main leak_lists memcheck "leak_tests_lists" "$TMP/leak_tests_lists"
+    queue main lstmap lenient memcheck "ft_lstmap: f's content on failure (warning)" "$TMP/leak_tests_lists" lstmap
 fi
 
 step 🧪 Tests
