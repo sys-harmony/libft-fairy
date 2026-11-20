@@ -320,9 +320,11 @@ FUNCTIONS=$(grep -oE 'ft_[a-z_]+\(' <<< "$PROTOTYPES" | tr -d '(')
 echo; box "$PINK" "LIBFT-FAIRY" 🧚; echo
 norm_start
 
-# Makefile, libft.h and ft_*.c, all at the root, and no unused file
+# Makefile, libft.h and ft_*.c, all at the root, no unused file, and what make
+# compiles committed (MADE: the sources make compiles, tracked or not)
 step 📂 Files
 CMDS=$(make -nB 2> /dev/null)
+MADE=$(grep -oE '[^[:space:]/]+\.c\b' <<< "$CMDS" | sort -u | while read -r f; do [[ -f $f ]] && echo "$f"; done)
 issues=()
 for f in Makefile libft.h; do [[ -f $f ]] || issues+=("missing at the root: $f"); done
 for f in $(sources); do
@@ -333,7 +335,7 @@ for f in $(sources); do
     fi
 done
 if [[ ${#issues[@]} -gt 0 ]]; then verdict "${issues[@]}"
-elif ! report_untracked Makefile README.md libft.h $(sources | grep '\.c$'); then ok; fi
+elif ! report_untracked Makefile README.md libft.h $MADE; then ok; fi
 [[ -f Makefile && -f libft.h ]] || exit 1
 
 check_readme
