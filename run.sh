@@ -350,7 +350,7 @@ if [[ ${#issues[@]} -gt 0 ]]; then verdict "${issues[@]}"
 elif ! report_untracked Makefile README.md libft.h $MADE; then ok; fi
 [[ -f Makefile && -f libft.h ]] || exit 1
 
-check_readme
+check_readme "library"
 check_norm
 
 # The compiler checks every prototype against the subject (names and spacing
