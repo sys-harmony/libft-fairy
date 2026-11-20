@@ -115,7 +115,7 @@ Other warnings:
 
 ## 📋 Requirements
 
-Linux with `bash` 4.3+, `cc`, `make`, `nm`, `valgrind`, `norminette`, `perl` and coreutils.
+Linux with `bash` 4.4+, `cc`, `make`, `nm`, `valgrind`, `norminette`, `perl` and coreutils.
 
 ## 📁 Structure
 
