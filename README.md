@@ -71,7 +71,7 @@ Only what did not pass is listed, each time with its reason: the call, what it g
 
 ## ⚖️ Failures and warnings
 
-A **failure** is a bug or a clear subject violation. A **warning** is something debatable: worth a look, maybe a question from your evaluator, never a failure. A working libft passes.
+A **failure** is a bug or a clear subject violation. A **warning** is something debatable: worth a look, maybe a question from your evaluator, never a failure. A working libft passes. Under the green or red verdict, a yellow line says so when there are warnings above, a failed run included.
 
 `NULL` where a string or a list is expected is undefined behaviour, so these tests never fail. They warn when the function does not do what most expect:
 
