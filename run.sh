@@ -438,14 +438,17 @@ elif [[ ${#extras[@]} -gt 0 ]]; then warn
 else ok; fi
 for e in "${extras[@]}"; do say "$e"; done
 
-# The sources again, with -g, so that Valgrind reports point to their lines
-# (libft.a if that fails), then every test file; all in parallel
+# The sources make compiles, again with -g, so that Valgrind reports point to
+# their lines (libft.a if that fails), then every test file; all in parallel
 step 🔨 "Test build"
 mkdir "$TMP/obj"
-for src in $(sources | grep '\.c$'); do job "g_$src" cc -g -I. -c "$src" -o "$TMP/obj/${src%.c}.o"; done
-await $(sources | grep '\.c$' | sed 's/^/g_/')
-LIB=("$TMP"/obj/*.o)
-for src in $(sources | grep '\.c$'); do [[ $(rc "g_$src") -eq 0 ]] || LIB=(-L. -lft); done
+LIB=(-L. -lft)
+if [[ -n $MADE ]]; then
+    for src in $MADE; do job "g_$src" cc -g -I. -c "$src" -o "$TMP/obj/${src%.c}.o"; done
+    await $(sed 's/^/g_/' <<< "$MADE")
+    LIB=("$TMP"/obj/*.o)
+    for src in $MADE; do [[ $(rc "g_$src") -eq 0 ]] || LIB=(-L. -lft); done
+fi
 TESTS="basic_tests basic_tests_lists leak_tests"
 for t in $TESTS; do
     job "cc_$t" cc -g -Wall -Wextra -Wno-missing-field-initializers -DVERBOSE=$VERBOSE -I. -no-pie \
