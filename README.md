@@ -82,13 +82,14 @@ Other warnings:
 - `ft_lstmap` leaking the content `f` made when a node's `malloc` fails (most evaluations skip it)
 - a public `ft_` function that is not in the subject: `static`, if it is a helper
 - a README that does not look like the subject's description, project files git does not track, or deleted but still committed
+- outside git, a `.c` defining `main()` (a local test): left out of the checks
 - `norminette` or `valgrind` missing: that check did not run
 
 ## 🧪 What is checked
 
 | Step | What |
 |---|---|
-| 📂 Files | `Makefile`, `libft.h` and `ft_*.c` at the root, nothing else among the graded files (a local, untracked `main.c` is fine); every `.c` compiled by `make` (unused files are forbidden); project files not committed, or deleted but still committed (warning) |
+| 📂 Files | `Makefile`, `libft.h` and `ft_*.c` at the root, nothing else among the graded files (a local, untracked `main.c` is fine; outside git, a `.c` defining `main()` is left out); every `.c` compiled by `make` (unused files are forbidden); project files not committed, or deleted but still committed (warning) |
 | 📖 README | there (failure), with the italic first line, *Description*, *Instructions*, *Resources* and how AI was used (warnings) |
 | 📝 Norm | `norminette` on the graded files |
 | 📋 Prototypes | the compiler checks `libft.h` against the 43 prototypes of the subject; no `restrict` |
