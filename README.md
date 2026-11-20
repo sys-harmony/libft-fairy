@@ -62,7 +62,8 @@ The exit status is `0` when everything passed (warnings included), `1` otherwise
 ╔════════════════════════════════════════════╗
 ║            OH NO... YOU FAILED!            ║
 ╚════════════════════════════════════════════╝
-   ✘ Tests · 3/69 tests failed · 1.90s
+
+✘ Tests · 3/69 tests failed · 1.90s
 ```
 
 Only what did not pass is listed, each time with its reason: the call, what it gave and what was expected, a crash signal, a timeout, or the Valgrind report, which points to your file and line.
